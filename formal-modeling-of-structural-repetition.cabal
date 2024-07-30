@@ -1,0 +1,164 @@
+cabal-version: 2.2
+
+-- This file has been generated from package.yaml by hpack version 0.37.0.
+--
+-- see: https://github.com/sol/hpack
+
+name:           formal-modeling-of-structural-repetition
+version:        0.1.0.0
+description:    Please see the README on Github at <https://github.com/githubuser/formal-modeling-of-structural-repetition#readme>
+homepage:       https://github.com/githubuser/formal-modeling-of-structural-repetition#readme
+bug-reports:    https://github.com/githubuser/formal-modeling-of-structural-repetition/issues
+author:         Zeng Ren
+maintainer:     example@example.com
+copyright:      2024 Zeng Ren
+license:        BSD-3-Clause
+license-file:   LICENSE
+build-type:     Simple
+extra-source-files:
+    README.md
+    CHANGELOG.md
+
+source-repository head
+  type: git
+  location: https://github.com/githubuser/formal-modeling-of-structural-repetition
+
+library
+  exposed-modules:
+      Import
+      Run
+      Types
+      Util
+      Visualization.TreeVisualizer
+  other-modules:
+      Paths_formal_modeling_of_structural_repetition
+  autogen-modules:
+      Paths_formal_modeling_of_structural_repetition
+  hs-source-dirs:
+      src
+  default-extensions:
+      GADTs
+      LambdaCase
+      TypeSynonymInstances
+      OverloadedStrings
+      DeriveGeneric
+      MultiParamTypeClasses
+      FlexibleInstances
+      FlexibleContexts
+      MultiWayIf
+      TypeFamilies
+      TypeOperators
+      FunctionalDependencies
+      KindSignatures
+      DeriveFunctor
+      TypeApplications
+      PartialTypeSignatures
+      ScopedTypeVariables
+  ghc-options: -Wall -Wcompat -Widentities -Wincomplete-record-updates -Wincomplete-uni-patterns -Wmissing-export-lists -Wmissing-home-modules -Wpartial-fields -Wredundant-constraints
+  build-depends:
+      aeson
+    , base >=4.11 && <10
+    , containers
+    , diagrams-contrib
+    , diagrams-lib
+    , diagrams-svg
+    , generics-sop
+    , megaparsec
+    , musicology-pitch
+    , rio >=0.1.12.0
+    , safe
+    , split
+    , text
+  default-language: Haskell2010
+
+executable formal-modeling-of-structural-repetition-exe
+  main-is: Main.hs
+  other-modules:
+      Paths_formal_modeling_of_structural_repetition
+  autogen-modules:
+      Paths_formal_modeling_of_structural_repetition
+  hs-source-dirs:
+      app
+  default-extensions:
+      GADTs
+      LambdaCase
+      TypeSynonymInstances
+      OverloadedStrings
+      DeriveGeneric
+      MultiParamTypeClasses
+      FlexibleInstances
+      FlexibleContexts
+      MultiWayIf
+      TypeFamilies
+      TypeOperators
+      FunctionalDependencies
+      KindSignatures
+      DeriveFunctor
+      TypeApplications
+      PartialTypeSignatures
+      ScopedTypeVariables
+  ghc-options: -Wall -Wcompat -Widentities -Wincomplete-record-updates -Wincomplete-uni-patterns -Wmissing-export-lists -Wmissing-home-modules -Wpartial-fields -Wredundant-constraints -threaded -rtsopts -with-rtsopts=-N
+  build-depends:
+      aeson
+    , base >=4.11 && <10
+    , containers
+    , diagrams-contrib
+    , diagrams-lib
+    , diagrams-svg
+    , formal-modeling-of-structural-repetition
+    , generics-sop
+    , megaparsec
+    , musicology-pitch
+    , optparse-simple
+    , rio >=0.1.12.0
+    , safe
+    , split
+    , text
+  default-language: Haskell2010
+
+test-suite formal-modeling-of-structural-repetition-test
+  type: exitcode-stdio-1.0
+  main-is: Spec.hs
+  other-modules:
+      UtilSpec
+      Paths_formal_modeling_of_structural_repetition
+  autogen-modules:
+      Paths_formal_modeling_of_structural_repetition
+  hs-source-dirs:
+      test
+  default-extensions:
+      GADTs
+      LambdaCase
+      TypeSynonymInstances
+      OverloadedStrings
+      DeriveGeneric
+      MultiParamTypeClasses
+      FlexibleInstances
+      FlexibleContexts
+      MultiWayIf
+      TypeFamilies
+      TypeOperators
+      FunctionalDependencies
+      KindSignatures
+      DeriveFunctor
+      TypeApplications
+      PartialTypeSignatures
+      ScopedTypeVariables
+  ghc-options: -Wall -Wcompat -Widentities -Wincomplete-record-updates -Wincomplete-uni-patterns -Wmissing-export-lists -Wmissing-home-modules -Wpartial-fields -Wredundant-constraints -threaded -rtsopts -with-rtsopts=-N
+  build-depends:
+      aeson
+    , base >=4.11 && <10
+    , containers
+    , diagrams-contrib
+    , diagrams-lib
+    , diagrams-svg
+    , formal-modeling-of-structural-repetition
+    , generics-sop
+    , hspec
+    , megaparsec
+    , musicology-pitch
+    , rio >=0.1.12.0
+    , safe
+    , split
+    , text
+  default-language: Haskell2010
