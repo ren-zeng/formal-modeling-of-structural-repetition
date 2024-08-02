@@ -1,3 +1,4 @@
+{-# LANGUAGE UndecidableInstances #-}
 module Compression.SLFP where
 
 import Control.Applicative (asum)
@@ -48,6 +49,13 @@ data Abstraction a
   | Abstraction a
   | (Abstraction a) `With` (a, [Abstraction a])
   deriving (Show, Eq, Ord)
+
+instance Size (Abstraction a) where 
+  size = \case 
+    Constant _ -> 1
+    Abstraction _ -> 1 
+    _ `With` (_,xs) -> 2 + length xs 
+
 
 class a `CachedBy` b where
   retrieve :: Map.Map b a
@@ -223,14 +231,14 @@ performRRewrite n drG m locs (SLTP t dP dR) = SLTP t' dP dR'
 class Size a where
   size :: a -> Int
 
-instance Size (SLFP a b) where
+instance Size (Abstraction a) => Size (SLFP a b) where
   size x = sum (size <$> sltps x) + size (globalPatterns x) + size (globalMetas x)
 
-instance Size (SLTP a) where
+instance Size (Abstraction a) => Size (SLTP a) where
   size (SLTP t pD mD) = size t + size pD + size mD
 
-instance Size (Tree a) where
-  size t = getSum $ foldMap (const 1) t
+instance (Size a) => Size (Tree a) where
+  size t = sum $ size <$> t
 
 instance (Size b) => Size (Map.Map a b) where
   size m = getSum $ foldMap (fromIntegral . size) m
