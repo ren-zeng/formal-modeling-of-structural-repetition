@@ -6,11 +6,11 @@ cabal-version: 2.2
 
 name:           formal-modeling-of-structural-repetition
 version:        0.1.0.0
-description:    Please see the README on Github at <https://github.com/githubuser/formal-modeling-of-structural-repetition#readme>
-homepage:       https://github.com/githubuser/formal-modeling-of-structural-repetition#readme
-bug-reports:    https://github.com/githubuser/formal-modeling-of-structural-repetition/issues
+description:    Please see the README on Github at <https://github.com/ren-zeng/formal-modeling-of-structural-repetition#readme>
+homepage:       https://github.com/ren-zeng/formal-modeling-of-structural-repetition#readme
+bug-reports:    https://github.com/ren-zeng/formal-modeling-of-structural-repetition/issues
 author:         Zeng Ren
-maintainer:     example@example.com
+maintainer:     zeng.ren@epfl.ch
 copyright:      2024 Zeng Ren
 license:        BSD-3-Clause
 license-file:   LICENSE
@@ -21,11 +21,20 @@ extra-source-files:
 
 source-repository head
   type: git
-  location: https://github.com/githubuser/formal-modeling-of-structural-repetition
+  location: https://github.com/ren-zeng/formal-modeling-of-structural-repetition
 
 library
   exposed-modules:
+      Compression.Meta
+      Compression.SLFP
+      Compression.Template
+      Compression.TreeUtils
       Import
+      IsmirExperiment
+      Preprocessing.JazzGrammar
+      Preprocessing.Main
+      Preprocessing.MusicTheory
+      Preprocessing.TreeBankParser
       Run
       Types
       Util
