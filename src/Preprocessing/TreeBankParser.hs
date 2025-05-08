@@ -14,7 +14,7 @@
 {-# OPTIONS_GHC -Wno-unticked-promoted-constructors,FlexibleContexts #-}
 {-# OPTIONS_GHC -Wno-unused-do-bind #-}
 
-module Preprocessing.TreeBankParser where
+module Preprocessing.TreeBankParser  where
 
 import Control.Applicative
 import Data.Aeson
@@ -223,23 +223,7 @@ pChordLabel = do
   pure (ChordLabel p q e)
 
 
-display :: ChordLabel -> String
-display (ChordLabel t q e) = printf "%s%s%s" (show t) (dq :: String) (de :: Extension)
-  where
-    (dq, de) = go (q, e)
-    go x
-      | x == (maj7, "7") = ("^", "7")
-      | x == (maj7, "") = ("^", "")
-      | x == (maj7, "6") = ("", "6")
-      | x == (min7, "7") = ("m", "7")
-      | x == (min7, "6") = ("m", "6")
-      | x == (min7, "^7") = ("m", "^7")
-      | x == (min7, "") = ("m", "")
-      | x == (m7b5, "7") = ("%", "7")
-      | x == (o7, "7") = ("o", "7")
-      | x == (dom7, "7") = ("", "7")
-      | x == (dom7, "sus") = ("", "sus")
-      | otherwise = ("?", "?")
+
 
 -- remember to consider order ("m7" before "m") to avoid backtracking
 pChordQualityExtension :: MyParser (Quality, Extension)

@@ -33,6 +33,7 @@ dependencies:
 - diagrams-lib
 - diagrams-svg 
 - diagrams-contrib
+- prettyprinter
 
 ghc-options:
 - -Wall

@@ -7,7 +7,7 @@ import Data.Tree
 import GHC.Generics (Generic)
 import Preprocessing.MusicTheory
 import Musicology.Pitch
-import Preprocessing.TreeBankParser (chordTree, treeChordLabel, parsePieces, Piece (title), display)
+import Preprocessing.TreeBankParser (chordTree, treeChordLabel, parsePieces, Piece (title))
 import Control.Arrow
 import Visualization.TreeVisualizer
 import Data.Foldable
@@ -17,19 +17,20 @@ import Text.Printf
 
 infixr 3 /\
 
-data PrepKind = V_I | IV_I | IV_V | VI_V | Diatonic5th | TritoneSub | Backdoor deriving (Show, Eq, Generic)
+data PrepKind = V_I | IV_I | IV_V | VI_V | Diatonic5th | TritoneSub | Backdoor deriving (Show, Eq, Generic,Ord)
 
 instance ToJSON PrepKind
 
 instance FromJSON PrepKind
 
-data ProlKind = Repeat | VI_I | I_VI | I_III | III_I | Octatonic | Hexatonic deriving (Show, Eq, Generic)
+data ProlKind = Repeat | VI_I | I_VI | I_III | III_I | Octatonic | Hexatonic deriving (Show, Eq, Generic,Ord)
 
 instance ToJSON ProlKind
 
 instance FromJSON ProlKind
 
-data RuleNames = Prol ProlKind | Prep PrepKind | Term | Ɂ deriving (Show, Eq, Generic)
+data RuleNames = Prol ProlKind | Prep PrepKind | Term | Ɂ 
+  deriving (Show, Eq, Generic,Ord)
 
 instance ToJSON RuleNames
 
@@ -112,27 +113,18 @@ unExplained t = Ɂ `elem` t
 
 inferRuleTree' :: Tree ChordLabel -> Tree (ChordLabel,RuleNames)
 inferRuleTree' (Node x []) = Node (x,Term) []
-inferRuleTree' (Node x [l, r])
-  | satisfyRule (Prol Repeat) (c1, c2) x = mergeWith (Prol Repeat)
-  | satisfyRule (Prol I_VI) (c1, c2) x = mergeWith (Prol I_VI)
-  | satisfyRule (Prol VI_I) (c1, c2) x = mergeWith (Prol VI_I)
-  | satisfyRule (Prol I_III) (c1, c2) x = mergeWith (Prol I_III)
-  | satisfyRule (Prol III_I) (c1, c2) x = mergeWith (Prol III_I)
-  | satisfyRule (Prep V_I) (c1, c2) x = mergeWith (Prep V_I)
-  | satisfyRule (Prep Diatonic5th) (c1, c2) x = mergeWith (Prep Diatonic5th)
-  | satisfyRule (Prep IV_I) (c1, c2) x = mergeWith (Prep IV_I)
-  | satisfyRule (Prep IV_V) (c1, c2) x = mergeWith (Prep IV_V)
-  | satisfyRule (Prep VI_V) (c1, c2) x = mergeWith (Prep VI_V)
-  | satisfyRule (Prep TritoneSub) (c1, c2) x = mergeWith (Prep TritoneSub)
-  | satisfyRule (Prep Backdoor) (c1, c2) x = mergeWith (Prep Backdoor)
-  -- if the previous can't explain, here comes the tonfeld theory rules
-  | satisfyRule (Prol Octatonic) (c1, c2) x = mergeWith (Prol Octatonic)
-  | satisfyRule (Prol Hexatonic) (c1, c2) x = mergeWith (Prol Hexatonic)
-  -- a catch-all rule
-  | satisfyRule Ɂ (c1, c2) x = mergeWith Ɂ
+inferRuleTree' (Node x [l, r]) = 
+  case findRule (rootLabel l, rootLabel r) x rules of
+        Just rule -> mergeWith rule
+        Nothing   -> mergeWith Ɂ
   where
-    (c1, c2) = (rootLabel l, rootLabel r)
+    rules = [ Prol Repeat, Prol I_VI, Prol VI_I, Prol I_III, Prol III_I
+            , Prep V_I, Prep Diatonic5th, Prep IV_I, Prep IV_V
+            , Prep VI_V, Prep TritoneSub, Prep Backdoor
+            , Prol Octatonic, Prol Hexatonic
+            ]
     mergeWith k = Node (x,k) (inferRuleTree' <$> [l, r])
+    findRule a b = find (\rule -> satisfyRule rule a b)
 inferRuleTree' _ = error "encountered non-binary split"
 
 inferRuleTree :: Tree ChordLabel -> Tree RuleNames

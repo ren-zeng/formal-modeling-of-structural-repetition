@@ -1,4 +1,4 @@
-module Compression.Template where
+module Compression.Template () where
 
 import Data.List.Split
 import Data.Tree
