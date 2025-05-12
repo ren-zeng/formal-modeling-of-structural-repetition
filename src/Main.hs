@@ -1,3 +1,2 @@
-import IsmirExperiment (ismirExperiment)
 main :: IO () 
-main = ismirExperiment
+main = undefined

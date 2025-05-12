@@ -25,12 +25,13 @@ source-repository head
 
 library
   exposed-modules:
+      AnalyzePattern
       Compression.Meta
       Compression.SLFP
       Compression.Template
       Compression.TreeUtils
+      Experiment.IsmirExperiment
       Import
-      IsmirExperiment
       Main
       Preprocessing.JazzGrammar
       Preprocessing.Main
@@ -72,7 +73,6 @@ library
     , diagrams-contrib
     , diagrams-lib
     , diagrams-svg
-    , generics-sop
     , megaparsec
     , musicology-pitch
     , prettyprinter
@@ -117,7 +117,6 @@ executable formal-modeling-of-structural-repetition-exe
     , diagrams-lib
     , diagrams-svg
     , formal-modeling-of-structural-repetition
-    , generics-sop
     , megaparsec
     , musicology-pitch
     , optparse-simple
@@ -165,7 +164,6 @@ test-suite formal-modeling-of-structural-repetition-test
     , diagrams-lib
     , diagrams-svg
     , formal-modeling-of-structural-repetition
-    , generics-sop
     , hspec
     , megaparsec
     , musicology-pitch

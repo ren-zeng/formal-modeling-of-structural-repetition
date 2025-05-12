@@ -22,14 +22,13 @@ import Data.Foldable (Foldable (toList))
 import Data.Functor (($>))
 import Data.List
 import Data.Maybe (mapMaybe)
-import Data.Text (Text, justifyRight, pack, toUpper, unpack)
+import Data.Text (Text, pack, toUpper)
 import Data.Tree (flatten)
 import Data.Tree qualified
-import Generics.SOP qualified
+
 import GHC.Generics (Generic)
 import Musicology.Pitch
 import Text.Megaparsec (MonadParsec (try), choice, parseMaybe, satisfy, takeRest, Parsec)
-import Text.Printf (printf)
 import Preprocessing.MusicTheory
 import Data.Void
 
@@ -92,9 +91,9 @@ data BinTree a where
   Node :: a -> BinTree a -> BinTree a -> BinTree a
   deriving (Show, Generic)
 
-instance Generics.SOP.Generic (BinTree a)
+-- instance Generics.SOP.Generic (BinTree a)
 
-instance Generics.SOP.HasDatatypeInfo (BinTree a)
+-- instance Generics.SOP.HasDatatypeInfo (BinTree a)
 
 
 class ToTree a where 

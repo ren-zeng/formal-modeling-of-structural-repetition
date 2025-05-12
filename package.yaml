@@ -29,7 +29,6 @@ dependencies:
 - text
 - megaparsec
 - musicology-pitch
-- generics-sop
 - diagrams-lib
 - diagrams-svg 
 - diagrams-contrib

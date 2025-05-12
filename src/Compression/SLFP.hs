@@ -444,3 +444,5 @@ symbolToExpand t = asum (symbolToExpandTop <$> t)
 
 -- >>> asum (Node (Just 'a') [Node (Just 'b') [],Node (Just 'c') []])
 -- Just 'a'
+
+
