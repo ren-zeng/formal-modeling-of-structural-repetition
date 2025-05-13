@@ -30,6 +30,17 @@ packages:
     commit: 21d3be9b932239cb638f4538067f40399cc7b465
     git: https://github.com/DCMLab/haskell-musicology.git
     subdir: musicology-pitch
+- completed:
+    commit: ebcb3789b9a2320a75df799b02ebdb433d96c6d4
+    git: https://github.com/ren-zeng/TreeDiagrams.git
+    name: TreeDiagrams
+    pantry-tree:
+      sha256: 84db60717d17d844d6d440f5d39f7cc19aac3f83fb94f8fbea4b7b1331eebfd8
+      size: 1654
+    version: 0.1.0.0
+  original:
+    commit: ebcb3789b9a2320a75df799b02ebdb433d96c6d4
+    git: https://github.com/ren-zeng/TreeDiagrams.git
 snapshots:
 - completed:
     sha256: 795b7a893148a42f09956611a0fa1139293fe6ef934d053468d8e53e3e013390

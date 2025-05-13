@@ -1,0 +1,197 @@
+module Experiment.TismirExperiment (
+    -- * (What are the patterns?) visualizing pattern as tree fragment
+    patternAsComputation,
+    patternSizeExpanded,
+    Computation (..),
+
+    -- * (Pattern dependencies)
+    patternDependents,
+
+    -- * (Where are the patterns?) pattern usage
+    patternGlobalFreq,
+    patternOccuranceG,
+    highlightPatternInCorpus,
+    drawOccuranceInCorpus,
+    SizeFreqDistribution (..),
+    OccuranceHeatMap (..),
+
+    -- * helper function for reporting pattern together with a feature of interest
+    report,
+) where
+
+import Compression.AttributedSLFP (SLFPAttributed)
+import qualified Compression.AttributedSLFP as Attributed
+import Compression.SLFP
+import Control.Arrow
+import Control.Monad.Fix (MonadFix (mfix))
+import Data.Functor.Foldable
+import Data.Functor.Foldable.TH
+import Data.Map (Map)
+import qualified Data.Map as Map
+import Data.Maybe
+import Data.Set (Set)
+import qualified Data.Set as Set
+import Experiment.Computation
+import GHC.Generics
+
+import Data.Function
+import Data.Tree
+import Diagrams.Backend.SVG
+import Diagrams.Prelude
+import Preprocessing.JazzGrammar
+import Visualization.BackEnd (BackEnd)
+import Visualization.Text
+import Visualization.Tree (treeDiagram)
+import Prettyprinter (pretty)
+
+type MetaID = String
+type PatternID = String
+
+-- What are the patterns? --
+
+patternAsComputation :: SLFP r k -> PatternID -> Computation r
+patternAsComputation = undefined
+
+patternSizeExpanded :: SLFP r k -> PatternID -> Int
+patternSizeExpanded slfp = computationSize . patternAsComputation slfp
+
+-- Where are the patterns? --
+
+containsPattern ::
+    (_) =>
+    -- | global dependents (containing indirect ones)
+    (PatternID -> Set PatternID) ->
+    PatternID ->
+    SLTP r ->
+    Bool
+containsPattern dependents p sltp =
+    if null (dependents p)
+        then any (matchAbstraction p) . compressedTree $ sltp
+        else any (\p' -> containsPattern dependents p' sltp) (dependents p)
+
+extractVar :: Abstraction a -> Maybe String
+extractVar (Var x) = Just x
+extractVar _ = Nothing
+
+matchAbstraction :: PatternID -> Abstraction r -> Bool
+matchAbstraction p = \case
+    Var s -> p == s
+    With x (mID, xs) -> any (matchAbstraction p) (x : xs)
+    Constant _ -> False
+
+isPattern :: PatternID ->  Abstraction r -> Bool
+isPattern p = \case 
+    Var s -> p == s 
+    _ -> False
+
+matchPattern :: PatternID -> Pattern (Abstraction r) -> Bool
+matchPattern p (Comp i x y) = any (matchAbstraction p) [x, y]
+
+reachables :: (Ord a) => (a -> Set a) -> a -> Set a
+reachables f initial = fixedPoint' Set.empty (f initial)
+  where
+    fixedPoint' seen current
+        | Set.null newElements = current
+        | otherwise = fixedPoint' newSeen (Set.union current newResults)
+      where
+        newElements = current `Set.difference` seen
+        newResults = Set.unions (map f (Set.toList newElements))
+        newSeen = Set.union seen current
+
+-- visualized occurance in piece --
+
+highlightDecompressed :: (_) => SLFP a k -> PatternID -> SLFPAttributed Bool a k
+highlightDecompressed slfp p =
+    fixedPoint 
+        (Attributed.deCompressGAttributed . Attributed.highlightNodeG (isPattern p)) $
+        Attributed.toSLFPAttributed (isPattern p) slfp
+
+highlightPatternInCorpus ::
+    (_) =>
+    SLFP a k ->
+    PatternID ->
+    Map k (Tree (Bool, Abstraction a))
+highlightPatternInCorpus slfp p =
+    highlightDecompressed slfp p
+        & Attributed.sltpsAttributed
+        & fmap Attributed.compressedTree
+        & Map.filter (any fst)
+
+-- | the set of patterns that are  dependent of the pattern
+patternDependents :: SLFP r k -> PatternID -> Set PatternID
+patternDependents slfp = reachables (directDependents slfp)
+
+directDependents :: SLFP r k -> PatternID -> Set PatternID
+directDependents slfp p =
+    Map.keysSet $
+        Map.filter
+            (matchPattern p)
+            (globalPatterns slfp)
+
+-- | the set of pieces that contains the pattern
+patternOccuranceG ::
+    (_) =>
+    SLFP r k ->
+    PatternID ->
+    Set k
+patternOccuranceG slfp p =
+    Map.keysSet
+        . Map.filter (containsPattern (patternDependents slfp) p)
+        . sltps
+        $ slfp
+
+metaOccurance :: SLFP r k -> MetaID -> [k]
+metaOccurance = undefined
+
+allPatterns :: SLFP a b -> [PatternID]
+allPatterns = Map.keys . globalPatterns
+
+-- | the number of pieces that contains the pattern
+patternGlobalFreq :: SLFP r k -> PatternID -> Int
+patternGlobalFreq slfp = Set.size . patternOccuranceG slfp
+
+
+newtype OccuranceHeatMap a k = OccuranceHeatMap [(a, k)]
+
+newtype SizeFreqDistribution a
+    = SizeFreqDistribution
+        [(a, Int, Int)]
+
+-- What is the dependency among patterns? --
+
+allDependents :: SLFP r k -> Map PatternID (Set PatternID)
+allDependents slfp = Map.fromList $ (id &&& patternDependents slfp) <$> allPatterns
+  where
+    allPatterns = Map.keys (globalPatterns slfp)
+
+-- helper function for reporting --
+report :: (SLFP a b -> PatternID -> c) -> SLFP a b -> [(PatternID, c)]
+report f slfp = (id &&& f slfp) <$> allPatterns slfp
+
+-- visualization --
+
+drawColoredTree :: (a -> Diagram BackEnd) -> Tree (Colour Double, a) -> Diagram BackEnd
+drawColoredTree f = treeDiagram drawNode
+  where
+    drawNode (c, a) = f a <> (circle 2 # fc c # lw none)
+
+type PieceID = String
+
+drawOccuranceInCorpus :: PatternID -> Map PieceID (Tree (Bool, Abstraction RuleNames)) -> Diagram BackEnd
+drawOccuranceInCorpus p d =
+    hsep
+        1
+        [ drawText p
+        , vsep 1 (uncurry drawOccuranceInPiece <$> Map.toList d)
+        ]
+
+drawOccuranceInPiece :: PieceID -> Tree (Bool, Abstraction RuleNames) -> Diagram BackEnd
+drawOccuranceInPiece pieceId t =
+    vsep
+        1
+        [ drawText pieceId
+        , drawColoredTree (drawText . show . pretty) $
+            fmap highlightedToColored t
+        ]
+highlightedToColored (True, a) = (brown, a)
+highlightedToColored (False, a) = (white, a)

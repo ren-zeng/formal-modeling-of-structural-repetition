@@ -2,39 +2,78 @@
 
 module Preprocessing.JazzGrammar where
 
+import Control.Arrow
 import Data.Aeson
 import Data.Tree
 import GHC.Generics (Generic)
-import Preprocessing.MusicTheory
 import Musicology.Pitch
-import Preprocessing.TreeBankParser (chordTree, treeChordLabel, parsePieces, Piece (title))
-import Control.Arrow
-import Visualization.TreeVisualizer
+import Preprocessing.MusicTheory
+import Preprocessing.TreeBankParser (Piece (title), chordTree, parsePieces, treeChordLabel, addTerminal)
+
+import Control.Monad
+import Core.ProofTree (ProofTree)
 import Data.Foldable
+import Diagrams (mkWidth,bg, frame)
+import Diagrams.Backend.SVG (renderSVG)
 import Text.Printf
+import Visualization.ProofTree
+import Visualization.Text
+import Core.ParseTree (inferParseTree, ParseTree (..), ParseTreeF (..))
+import Core.SymbolTree
+import Visualization.ParseTree (drawParseTree)
+import Data.Functor.Foldable
+import Prettyprinter
+import Diagrams.Prelude (white)
+import Data.Maybe
+
+
 
 (/\) = (&&)
 
 infixr 3 /\
 
-data PrepKind = V_I | IV_I | IV_V | VI_V | Diatonic5th | TritoneSub | Backdoor deriving (Show, Eq, Generic,Ord)
+data PrepKind = V_I | IV_I | IV_V | VI_V | Diatonic5th | TritoneSub | Backdoor deriving (Show, Eq, Generic, Ord)
+
+instance Pretty PrepKind where
+  pretty V_I = "V-I"
+  pretty IV_I = "Ⅳ-I"
+  pretty IV_V = "Ⅳ-V"
+  pretty VI_V = "Ⅳ-V"
+  pretty Diatonic5th = "Diatonic5th"
+  pretty TritoneSub = "TritoneSub"
+  pretty Backdoor = "Backdoor"
 
 instance ToJSON PrepKind
 
 instance FromJSON PrepKind
 
-data ProlKind = Repeat | VI_I | I_VI | I_III | III_I | Octatonic | Hexatonic deriving (Show, Eq, Generic,Ord)
+data ProlKind = Repeat | VI_I | I_VI | I_III | III_I | Octatonic | Hexatonic deriving (Show, Eq, Generic, Ord)
+instance Pretty ProlKind where
+  pretty Repeat = "Repeat"
+  pretty VI_I = "Ⅵ-I"
+  pretty I_VI = "I-Ⅵ"
+  pretty I_III = "I-Ⅲ"
+  pretty III_I = "Ⅲ-I"
+  pretty Octatonic = "Octatonic"
+  pretty Hexatonic = "Hexatonic"
 
 instance ToJSON ProlKind
 
 instance FromJSON ProlKind
 
-data RuleNames = Prol ProlKind | Prep PrepKind | Term | Ɂ 
-  deriving (Show, Eq, Generic,Ord)
+data RuleNames = Prol ProlKind | Prep PrepKind | Term | Ɂ
+  deriving (Show, Eq, Generic, Ord)
+
 
 instance ToJSON RuleNames
 
 instance FromJSON RuleNames
+
+instance Pretty RuleNames where
+  pretty (Prol k) = pretty k
+  pretty (Prep k) = pretty k
+  pretty Term = "Term"
+  pretty Ɂ = "?"
 
 data AbstractRule = AbstractRule RuleNames deriving (Eq, Generic)
 
@@ -46,7 +85,7 @@ instance Show AbstractRule where
   show (AbstractRule (Prol _)) = "Prol"
   show (AbstractRule (Prep _)) = "Prep"
   show (AbstractRule Term) = "Term"
-  show (AbstractRule Ɂ) = "Ɂ"
+  show (AbstractRule Ɂ) = "?"
 
 (=~) :: ChordLabel -> ChordLabel -> Bool
 (ChordLabel r q _) =~ (ChordLabel r' q' _) = (r, q) == (r', q')
@@ -65,6 +104,19 @@ infix 4 <~>
 
 -- >>> toMidi (e' flt `pto` c' nat) `mod` 3
 -- 0
+
+relMinorOf :: ChordLabel -> ChordLabel -> Bool
+(ChordLabel t q _) `relMinorOf` (ChordLabel t' q' _)
+  | (t `pto` t' == minor third') /\ isMinor q /\ isMajor q' = True
+  | otherwise = False
+
+isMinor :: Quality -> Bool
+isMinor (Min, Maj, _) = True
+isMinor _ = False
+
+isMajor :: Quality -> Bool
+isMajor (Maj, Min, _) = True
+isMajor _ = False
 
 satisfyRule :: RuleNames -> (ChordLabel, ChordLabel) -> ChordLabel -> Bool
 satisfyRule r (x, y) z = case r of
@@ -100,7 +152,7 @@ satisfyRule r (x, y) z = case r of
   Prep VI_V ->
     (y == z)
       /\ ( (root y `pto` root x == major second') /\ (quality x == min7)
-             || (root y `pto` root x == minor second') /\ (quality x == maj7)
+            || (root y `pto` root x == minor second') /\ (quality x == maj7)
          )
       /\ (quality y == dom7)
   Prol Octatonic -> (x ~~ z) /\ (y ~~ z)
@@ -111,67 +163,101 @@ satisfyRule r (x, y) z = case r of
 unExplained :: Tree RuleNames -> Bool
 unExplained t = Ɂ `elem` t
 
-inferRuleTree' :: Tree ChordLabel -> Tree (ChordLabel,RuleNames)
-inferRuleTree' (Node x []) = Node (x,Term) []
-inferRuleTree' (Node x [l, r]) = 
-  case findRule (rootLabel l, rootLabel r) x rules of
-        Just rule -> mergeWith rule
-        Nothing   -> mergeWith Ɂ
-  where
-    rules = [ Prol Repeat, Prol I_VI, Prol VI_I, Prol I_III, Prol III_I
-            , Prep V_I, Prep Diatonic5th, Prep IV_I, Prep IV_V
-            , Prep VI_V, Prep TritoneSub, Prep Backdoor
-            , Prol Octatonic, Prol Hexatonic
-            ]
-    mergeWith k = Node (x,k) (inferRuleTree' <$> [l, r])
-    findRule a b = find (\rule -> satisfyRule rule a b)
-inferRuleTree' _ = error "encountered non-binary split"
 
-inferRuleTree :: Tree ChordLabel -> Tree RuleNames
-inferRuleTree = fmap snd . inferRuleTree'
 
-relMinorOf :: ChordLabel -> ChordLabel -> Bool
-(ChordLabel t q _) `relMinorOf` (ChordLabel t' q' _)
-  | (t `pto` t' == minor third') /\ isMinor q /\ isMajor q' = True
-  | otherwise = False
+-- inferRuleTree' :: Tree ChordLabel -> Tree (ChordLabel, RuleNames)
+-- inferRuleTree' (Node x []) = Node (x, Term) []
+-- inferRuleTree' (Node x [l, r]) =
+--   case findRule (rootLabel l, rootLabel r) x rules of
+--     Just rule -> mergeWith rule
+--     Nothing -> mergeWith Ɂ
+--  where
+--   rules =
+--     [ Prol Repeat
+--     , Prol I_VI
+--     , Prol VI_I
+--     , Prol I_III
+--     , Prol III_I
+--     , Prep V_I
+--     , Prep Diatonic5th
+--     , Prep IV_I
+--     , Prep IV_V
+--     , Prep VI_V
+--     , Prep TritoneSub
+--     , Prep Backdoor
+--     , Prol Octatonic
+--     , Prol Hexatonic
+--     ]
+--   mergeWith k = Node (x, k) (inferRuleTree' <$> [l, r])
+--   findRule a b = find (\rule -> satisfyRule rule a b)
+-- inferRuleTree' _ = error "encountered non-binary split"
 
-isMinor :: Quality -> Bool
-isMinor (Min, Maj, _) = True
-isMinor _ = False
+inferRule :: ChordLabel -> [Symbol ChordLabel t] -> Maybe RuleNames
+inferRule nt [T _] = Just $ Term  
+inferRule nt syms = do 
+  [x,y] <- mapM extractNT syms
+  find (\rule -> satisfyRule rule (x,y) nt) 
+    [ Prol Repeat
+      , Prol I_VI
+      , Prol VI_I
+      , Prol I_III
+      , Prol III_I
+      , Prep V_I
+      , Prep Diatonic5th
+      , Prep IV_I
+      , Prep IV_V
+      , Prep VI_V
+      , Prep TritoneSub
+      , Prep Backdoor
+      , Prol Octatonic
+      , Prol Hexatonic
+      , Ɂ
+      ]
 
-isMajor :: Quality -> Bool
-isMajor (Maj, Min, _) = True
-isMajor _ = False
 
--- | proof tree with detailed rules
-annotatedProofTree :: Tree ChordLabel -> Tree (String, String)
-annotatedProofTree t = (display *** show) <$> inferRuleTree' t
+
+
+
+-- -- | proof tree with detailed rules
+-- annotatedProofTree :: Tree ChordLabel -> Tree (String, String)
+-- annotatedProofTree t = (display *** show) <$> inferRuleTree' t
 
 -- -- | proof tree with abstract rules
 -- annotatedProofTree' :: Tree ChordLabel -> Tree (String, String)
 -- annotatedProofTree' t = zipTree (display <$> t) (show . AbstractRule <$> inferRuleTree t)
 
+pieceSymbolTree :: Piece -> Maybe (SymbolTree ChordLabel ChordLabel)
+pieceSymbolTree  = (return . addTerminal) <=< (treeChordLabel . chordTree)
 
-plotAllProofTree :: Foldable t => t Piece -> FilePath -> IO ()
+pieceParseTree :: Piece -> Maybe (ParseTree RuleNames ChordLabel ChordLabel)
+pieceParseTree = inferParseTree inferRule <=< pieceSymbolTree
+
+
+plotAllProofTree :: (Foldable t) => t Piece -> FilePath -> IO ()
 plotAllProofTree ps outFolder = do
-    let ct  = treeChordLabel . chordTree
-        proofTree t = annotatedProofTree <$> (treeChordLabel . chordTree) t
-        tRule t =  proofTreeDiagram <$> proofTree t
-        unexplainable = fmap (unExplained . inferRuleTree) . (treeChordLabel . chordTree)
-        plot x = forM_ (tRule x) (writeSVG (printf "%s/(proof) %s.svg" outFolder (title x)))
-    mapM_ plot ps
-    -- pure . (\x-> (length x, title <$> x)) $ filter  ((== Just True) . unexplainable ) ps
+  forM_ ps $ \p ->
+    case pieceParseTree p of 
+      Nothing -> pure () 
+      Just t -> 
+        renderSVG
+          (printf "%s/(proof) %s.svg" outFolder (title p))
+          (mkWidth 1000)
+          (Diagrams.bg white $ drawParseTree (frame 0.25 . drawText .  show . pretty) (drawText . show.pretty) t)
 
--- -- >>> plotAllProofTree
--- -- (39,["Beatrice","Lady Bird","Afro Blue","Brotherhood Of Man","Half Nelson","Leaving","Bluesette","Paper Doll","Serenity","Simone","St. Thomas","Night Dreamer","It's Been A Long Long Time","I Wish I Knew How It Would Feel To Be Free","Glad To Be Unhappy","In A Mellow Tone (In A Mellotone)","Move","Someday My Prince Will Come","Cool One, The","I've Got A Crush On You","Jeannie's Song","Boy Next Door","Smile","Struttin' With Some Barbecue","502 Blues","Bill Bailey","Blue Lou","In A Little Spanish Town","My Melancholy Baby","Nuages","Them There Eyes","Zingaro (Retrato Em Branco E Preto)","Dancing In The Dark","Donna Lee","Fine Romance, A","Hackensack","Jersey Bounce","Just In Time","Best Things In Life Are Free, The"])
 
-writeAllProofTree :: FilePath -> IO [Maybe (Tree RuleNames)]
-writeAllProofTree file = do
-    ps <- parsePieces file
-    let f = fmap inferRuleTree . treeChordLabel . chordTree
-        r = f <$> ps
-    encodeFile "allProofTrees.json" r
-    return r
+writeAllParseTree :: FilePath -> FilePath -> IO ()
+writeAllParseTree dataPath outPath = do
+  ps <- parsePieces dataPath
+  encodeFile (outPath <> "/allProofTrees.json") (pieceParseTree <$> ps)
+  plotAllProofTree ps $ outPath 
+
+
+reportProofAllProofTree :: IO () 
+reportProofAllProofTree = writeAllParseTree
+    "Experiment/DataSet/treebank.json"
+    "Experiment/DataSet/ProofTrees"
+
+
 
 -- plotSimpleRulePatternReport = do
 --     ps <- pieces
@@ -187,15 +273,13 @@ writeAllProofTree file = do
 --         Just g -> renderSVG "(SimpleRule) PatternReport.svg" (dims2D 1000 1000) $ plotDigramStatistics ps' (digramStatistic' g ) -- renderSVG "(SimpleRule) DependencyAnalysis.svg" (dims2D 10000 10000)  (plotDependency g)
 --         Nothing -> pure ()
 
-
+parseTreeToRuleTree :: ParseTree r nt t 
+  -> Maybe (Tree r)
+parseTreeToRuleTree = \case 
+  Leaf _ -> Nothing 
+  ParseTree _ r ts -> return $ Node r  $ mapMaybe parseTreeToRuleTree ts 
 
 tRule :: Piece -> Maybe (Tree RuleNames)
-tRule p = do
-  ct <- (treeChordLabel . chordTree) p
-  let t = inferRuleTree ct
-  return t
+tRule = parseTreeToRuleTree <=< pieceParseTree 
 
-ruleTree :: FilePath -> IO (Maybe (Tree RuleNames))
-ruleTree file = do
-  ps <- parsePieces file
-  return $ tRule (head ps)
+

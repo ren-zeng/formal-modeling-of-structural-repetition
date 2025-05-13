@@ -46,6 +46,9 @@ extra-deps:
   - musicology-core
   - musicology-pitch
 
+- git: https://github.com/ren-zeng/TreeDiagrams.git 
+  commit: ebcb3789b9a2320a75df799b02ebdb433d96c6d4
+
 # extra-deps: []
 
 # Override default flag values for project packages and extra-deps

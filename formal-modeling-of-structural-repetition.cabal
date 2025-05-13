@@ -26,11 +26,15 @@ source-repository head
 library
   exposed-modules:
       AnalyzePattern
+      Compression.AttributedSLFP
       Compression.Meta
+      Compression.Report
       Compression.SLFP
       Compression.Template
       Compression.TreeUtils
+      Experiment.Computation
       Experiment.IsmirExperiment
+      Experiment.TismirExperiment
       Import
       Main
       Preprocessing.JazzGrammar
@@ -40,7 +44,7 @@ library
       Run
       Types
       Util
-      Visualization.TreeVisualizer
+      Vis.TreeVisualizer
   other-modules:
       Paths_formal_modeling_of_structural_repetition
   autogen-modules:
@@ -65,9 +69,12 @@ library
       TypeApplications
       PartialTypeSignatures
       ScopedTypeVariables
+      TemplateHaskell
+      DeriveTraversable
   ghc-options: -Wall -Wcompat -Widentities -Wincomplete-record-updates -Wincomplete-uni-patterns -Wmissing-export-lists -Wmissing-home-modules -Wpartial-fields -Wredundant-constraints
   build-depends:
-      aeson
+      TreeDiagrams
+    , aeson
     , base >=4.11 && <10
     , containers
     , diagrams-contrib
@@ -76,6 +83,7 @@ library
     , megaparsec
     , musicology-pitch
     , prettyprinter
+    , recursion-schemes
     , rio >=0.1.12.0
     , safe
     , split
@@ -108,9 +116,12 @@ executable formal-modeling-of-structural-repetition-exe
       TypeApplications
       PartialTypeSignatures
       ScopedTypeVariables
+      TemplateHaskell
+      DeriveTraversable
   ghc-options: -Wall -Wcompat -Widentities -Wincomplete-record-updates -Wincomplete-uni-patterns -Wmissing-export-lists -Wmissing-home-modules -Wpartial-fields -Wredundant-constraints -threaded -rtsopts -with-rtsopts=-N
   build-depends:
-      aeson
+      TreeDiagrams
+    , aeson
     , base >=4.11 && <10
     , containers
     , diagrams-contrib
@@ -121,6 +132,7 @@ executable formal-modeling-of-structural-repetition-exe
     , musicology-pitch
     , optparse-simple
     , prettyprinter
+    , recursion-schemes
     , rio >=0.1.12.0
     , safe
     , split
@@ -155,9 +167,12 @@ test-suite formal-modeling-of-structural-repetition-test
       TypeApplications
       PartialTypeSignatures
       ScopedTypeVariables
+      TemplateHaskell
+      DeriveTraversable
   ghc-options: -Wall -Wcompat -Widentities -Wincomplete-record-updates -Wincomplete-uni-patterns -Wmissing-export-lists -Wmissing-home-modules -Wpartial-fields -Wredundant-constraints -threaded -rtsopts -with-rtsopts=-N
   build-depends:
-      aeson
+      TreeDiagrams
+    , aeson
     , base >=4.11 && <10
     , containers
     , diagrams-contrib
@@ -168,6 +183,7 @@ test-suite formal-modeling-of-structural-repetition-test
     , megaparsec
     , musicology-pitch
     , prettyprinter
+    , recursion-schemes
     , rio >=0.1.12.0
     , safe
     , split

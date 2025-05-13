@@ -15,6 +15,10 @@ import Data.Monoid (Sum (getSum))
 import Data.Tree (Tree (..))
 import Safe (maximumByMay)
 import Text.Printf (PrintfType, printf)
+import GHC.Generics (Generic)
+import Data.Aeson
+import Prettyprinter (Pretty (..), (<+>))
+import qualified Prettyprinter as Pretty
 
 {- | Accumulated results of applying a list of f :: a->a  on a initial value.
 The output list is finite if we can reach a fixpoint of f.
@@ -50,7 +54,16 @@ data Abstraction a
   = Constant a
   | Var String
   | (Abstraction a) `With` (String, [Abstraction a])
-  deriving (Show, Eq, Ord)
+  deriving (Show, Eq, Ord,Generic)
+
+instance (FromJSON a) =>  FromJSON (Abstraction a)
+instance (ToJSON a) =>  ToJSON (Abstraction a)
+
+instance Pretty a => Pretty (Abstraction a) where
+  pretty  (Constant x) = pretty x
+  pretty (Var x) = pretty x 
+  pretty (x `With` (s,xs)) = pretty x <+> "{" <> pretty s <> "}"<+> 
+    Pretty.hsep (pretty <$> xs)
 
 instance Size (Abstraction a) where
   size = \case
@@ -420,6 +433,8 @@ deCompressTree dP dM dA t@(Node r ts) = case r of
    where
     groupings = inferArity dP dM dA <$> useMeta meta x as
     meta = dM m
+
+
 
 inferArity ::
   (String -> Pattern (Abstraction a)) ->

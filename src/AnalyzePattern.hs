@@ -7,7 +7,7 @@ import RIO
 import Preprocessing.TreeBankParser (parsePieces, Piece (..), title)
 import Preprocessing.JazzGrammar (tRule)
 import qualified Data.Map as Map
-import Visualization.TreeVisualizer (treeDiagram, toTreeDiagram')
+
 import Diagrams.Backend.SVG (renderSVG)
 import Diagrams (mkSizeSpec2D, global)
 import Data.Map.Lazy (keys)

@@ -3,12 +3,18 @@ module Preprocessing.MusicTheory where
 import Musicology.Pitch (SPC)
 import Data.Text
 import Text.Printf
+import GHC.Generics
+import Data.Aeson
+import Prettyprinter
 
 data Mode = Major | Minor deriving (Show, Eq)
 data Key = Key SPC Mode deriving (Show)
 
 
-data ThirdQuality = Maj | Min deriving (Show, Eq)
+data ThirdQuality = Maj | Min deriving (Show, Eq,Generic)
+instance ToJSON ThirdQuality
+instance FromJSON ThirdQuality
+
 
 type Extension = Text
 
@@ -16,7 +22,13 @@ type Extension = Text
 -- Major Seventh is defined as (M3,m3,M3) so we just encode (Maj, Min, Maj)
 type Quality = (ThirdQuality, ThirdQuality, ThirdQuality)
 
-data ChordLabel = ChordLabel {root :: SPC, quality :: Quality, extension :: Extension} deriving (Show, Eq)
+data ChordLabel = ChordLabel {root :: SPC, quality :: Quality, extension :: Extension} deriving (Show, Eq,Generic)
+
+instance ToJSON ChordLabel
+instance FromJSON ChordLabel
+
+instance Pretty ChordLabel where
+  pretty = pretty . display
 
 display :: ChordLabel -> String
 display (ChordLabel t q e) = printf "%s%s%s" (show t) (dq :: String) (de :: Extension)

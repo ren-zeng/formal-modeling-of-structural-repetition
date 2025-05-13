@@ -20,7 +20,7 @@ import Control.Applicative
 import Data.Aeson
 import Data.Foldable (Foldable (toList))
 import Data.Functor (($>))
-import Data.List
+import Data.List hiding (head)
 import Data.Maybe (mapMaybe)
 import Data.Text (Text, pack, toUpper)
 import Data.Tree (flatten)
@@ -31,6 +31,9 @@ import Musicology.Pitch
 import Text.Megaparsec (MonadParsec (try), choice, parseMaybe, satisfy, takeRest, Parsec)
 import Preprocessing.MusicTheory
 import Data.Void
+import Core.SymbolTree
+import Data.Functor.Base hiding (head)
+import Data.Functor.Foldable
 
 -- import Data.Tree
 
@@ -211,7 +214,12 @@ pKey = do
 
 
 treeChordLabel :: Data.Tree.Tree Text -> Maybe (Data.Tree.Tree ChordLabel)
-treeChordLabel (ts :: Data.Tree.Tree _) = mapM (parseMaybe pChordLabel) ts
+treeChordLabel = mapM (parseMaybe pChordLabel) 
+
+addTerminal :: Data.Tree.Tree ChordLabel -> SymbolTree ChordLabel ChordLabel
+addTerminal  = cata $ \case 
+  NodeF x [] -> NTNode x [TLeaf x]
+  NodeF x ts -> NTNode x ts
 
 pChordLabel :: MyParser ChordLabel
 pChordLabel = do

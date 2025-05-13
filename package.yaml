@@ -33,7 +33,8 @@ dependencies:
 - diagrams-svg 
 - diagrams-contrib
 - prettyprinter
-
+- TreeDiagrams
+- recursion-schemes
 ghc-options:
 - -Wall
 - -Wcompat
@@ -63,6 +64,8 @@ default-extensions:
 - TypeApplications
 - PartialTypeSignatures
 - ScopedTypeVariables
+- TemplateHaskell
+- DeriveTraversable
 library:
   source-dirs: src
 
