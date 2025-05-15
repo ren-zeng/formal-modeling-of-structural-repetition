@@ -3,7 +3,7 @@ version:             0.1.0.0
 github:              githubuser/formal-modeling-of-structural-repetition
 license:             BSD-3-Clause
 author:              Zeng Ren
-maintainer:          example@example.com
+maintainer:          zeng.ren@epfl.ch
 copyright:           2024 Zeng Ren
 
 extra-source-files:
@@ -35,6 +35,8 @@ dependencies:
 - prettyprinter
 - TreeDiagrams
 - recursion-schemes
+- vector
+- directory
 ghc-options:
 - -Wall
 - -Wcompat

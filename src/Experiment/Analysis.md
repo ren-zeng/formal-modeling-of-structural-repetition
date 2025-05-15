@@ -7,9 +7,10 @@
     - visualized as computation with holes.
   - Semantics (as a production rule)
     - visualized as `x -> f1(x) f2(x) ...`
-  - Basic statistics
-    - size when expanded
+  - Basic statistics 
+    - size when expanded (number of rules involved)
     - number of terminals and non-terminals generated
+  
 
 - Where are the patterns in the corpus?
   > e.g. "pattern_1 occurs in piece_1...n"

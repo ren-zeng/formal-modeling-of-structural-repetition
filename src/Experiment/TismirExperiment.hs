@@ -38,11 +38,12 @@ import Data.Function
 import Data.Tree
 import Diagrams.Backend.SVG
 import Diagrams.Prelude
-import Preprocessing.JazzGrammar
+import Grammar.JazzHarmony.JazzGrammar
 import Visualization.BackEnd (BackEnd)
 import Visualization.Text
 import Visualization.Tree (treeDiagram)
 import Prettyprinter (pretty)
+
 
 type MetaID = String
 type PatternID = String

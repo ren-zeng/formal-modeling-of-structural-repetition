@@ -10,7 +10,7 @@ description:    Please see the README on Github at <https://github.com/githubuse
 homepage:       https://github.com/githubuser/formal-modeling-of-structural-repetition#readme
 bug-reports:    https://github.com/githubuser/formal-modeling-of-structural-repetition/issues
 author:         Zeng Ren
-maintainer:     example@example.com
+maintainer:     zeng.ren@epfl.ch
 copyright:      2024 Zeng Ren
 license:        BSD-3-Clause
 license-file:   LICENSE
@@ -35,16 +35,19 @@ library
       Experiment.Computation
       Experiment.IsmirExperiment
       Experiment.TismirExperiment
+      Grammar.JazzHarmony.JazzGrammar
+      Grammar.JazzHarmony.MusicTheory
+      Grammar.Rhythm.RhythmGrammar
       Import
       Main
-      Preprocessing.JazzGrammar
-      Preprocessing.Main
-      Preprocessing.MusicTheory
-      Preprocessing.TreeBankParser
+      Preprocessing.AbstractDataSet
+      Preprocessing.JazzHarmony.Main
+      Preprocessing.JazzHarmony.TreeBankLoader
+      Preprocessing.Rhythm.Classical.Main
+      Preprocessing.Rhythm.Classical.TreeBankLoader
       Run
       Types
       Util
-      Vis.TreeVisualizer
   other-modules:
       Paths_formal_modeling_of_structural_repetition
   autogen-modules:
@@ -80,6 +83,7 @@ library
     , diagrams-contrib
     , diagrams-lib
     , diagrams-svg
+    , directory
     , megaparsec
     , musicology-pitch
     , prettyprinter
@@ -88,6 +92,7 @@ library
     , safe
     , split
     , text
+    , vector
   default-language: Haskell2010
 
 executable formal-modeling-of-structural-repetition-exe
@@ -127,6 +132,7 @@ executable formal-modeling-of-structural-repetition-exe
     , diagrams-contrib
     , diagrams-lib
     , diagrams-svg
+    , directory
     , formal-modeling-of-structural-repetition
     , megaparsec
     , musicology-pitch
@@ -137,6 +143,7 @@ executable formal-modeling-of-structural-repetition-exe
     , safe
     , split
     , text
+    , vector
   default-language: Haskell2010
 
 test-suite formal-modeling-of-structural-repetition-test
@@ -178,6 +185,7 @@ test-suite formal-modeling-of-structural-repetition-test
     , diagrams-contrib
     , diagrams-lib
     , diagrams-svg
+    , directory
     , formal-modeling-of-structural-repetition
     , hspec
     , megaparsec
@@ -188,4 +196,5 @@ test-suite formal-modeling-of-structural-repetition-test
     , safe
     , split
     , text
+    , vector
   default-language: Haskell2010

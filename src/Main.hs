@@ -5,23 +5,15 @@ import qualified Data.Map as Map hiding (drop)
 import Data.Tree
 import Diagrams
 import Diagrams.Backend.SVG (renderSVG)
-import Diagrams.Prelude (black, brown)
-import Experiment.IsmirExperiment (ismirExperiment)
 import Experiment.TismirExperiment
-import Preprocessing.JazzGrammar
-import Prettyprinter (pretty)
-import RIO.Directory (getCurrentDirectory, getHomeDirectory)
+import Grammar.JazzHarmony.JazzGrammar
 import RIO.FilePath (takeDirectory)
 import System.Environment (getExecutablePath)
-import Visualization.BackEnd (BackEnd)
-import Visualization.Text
 import Data.List
 import qualified Data.Ord
+import Experiment.IsmirExperiment (runAllExperiments)
 
-main :: IO ()
-main = do
-    -- ismirExperiment
-    plotHighlighted
+
 
 type PatternID = String
 
@@ -42,3 +34,11 @@ plotHighlighted = do
         (repoRoot <> "/Experiment/Result/" <> "highlightedPattern.svg")
         (mkWidth 1000)
         diagram
+
+main :: IO ()
+main = do
+    mainRoot <- getExecutablePath
+    let repoRoot = takeDirectory $ takeDirectory  mainRoot
+    runAllExperiments (repoRoot <> "/Experiment")
+    -- plotHighlighted
+

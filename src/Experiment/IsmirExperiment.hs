@@ -11,37 +11,25 @@ import Data.List (sortOn)
 import qualified Data.Map as Map hiding (filter, mapMaybe, take)
 import Data.Tree
 import GHC.Generics hiding (Meta)
-import Preprocessing.JazzGrammar
-import Preprocessing.TreeBankParser
+import Grammar.JazzHarmony.JazzGrammar
+import Preprocessing.JazzHarmony.TreeBankLoader
 import Prettyprinter
 import RIO.FilePath
 import System.Environment (getExecutablePath)
 
-import AnalyzePattern
-
 -- import Visualization.TreeVisualizer
 
 import Control.Arrow
-import Control.Monad
+import Control.Exception (throw, throwIO)
+import Core.ParseTree
 import Debug.Trace (traceM)
-import Diagrams hiding (size)
-import Diagrams.Backend.SVG
-import Experiment.TismirExperiment 
-import Visualization.Text
-import Visualization.Tree
+import Experiment.TismirExperiment
+import GHC.IO.Exception (IOException (IOError))
+import Grammar.JazzHarmony.MusicTheory
+import Grammar.Rhythm.RhythmGrammar (RhythmNT, RhythmRule, RhythmTerminal)
 
 proofTreeFolderPath :: String
 proofTreeFolderPath = "experiment/data/ProofTrees"
-
-mkCorpusSLFP :: (_) => (a -> b) -> (a -> Maybe (Tree r)) -> [a] -> SLFP r b
-mkCorpusSLFP getName getTree xs = initSLFP $ mapMaybe f xs
-  where
-    f x = do
-        tree <- getTree x
-        return (getName x, tree)
-
-harmonyCorpuSLFP :: (_) => [Piece] -> SLFP RuleNames String
-harmonyCorpuSLFP = mkCorpusSLFP title tRule
 
 minedMetas :: SLFP r b -> [(String, Meta)]
 minedMetas = filter (\(_, m) -> length m <= 4) . sortOn (metaRuleNameToInt . fst) . Map.toList . globalMetas
@@ -99,22 +87,21 @@ reportCompression resultDir slfp = do
         ruleStats = ruleSummary final
         pieceSizeComparison = (\(k, (ori, fin)) -> SizeChange (show $ pretty k) ori fin) <$> Map.toList (individualPieceChange slfp final)
 
-    encodeFile (resultDir <> "globalMetas.json") ms
-    encodeFile (resultDir <> "ruleStats.json") ruleStats
-    encodeFile (resultDir <> "pieceSizeComparison.json") pieceSizeComparison
+    encodeFile (resultDir <> "/globalMetas.json") ms
+    encodeFile (resultDir <> "/ruleStats.json") ruleStats
+    encodeFile (resultDir <> "/pieceSizeComparison.json") pieceSizeComparison
     encodeFile
         (resultDir <> "sizeCurve.json")
         (uncurry SizeCurve <$> zip [1 ..] (size <$> steps))
 
-    encodeFile (resultDir <> "patternDependents.json")
-        $ report patternDependents final
-    encodeFile (resultDir <> "patternGlobalFreq.json")
-        $ report patternGlobalFreq final
-    encodeFile (resultDir <> "patternOccuranceG.json")
-        $ report patternOccuranceG final
-    encodeFile (resultDir <> "patternHighlightedInCorpus.json") 
-        $ report highlightPatternInCorpus final
-
+    encodeFile (resultDir <> "/patternDependents.json") $
+        report patternDependents final
+    encodeFile (resultDir <> "/patternGlobalFreq.json") $
+        report patternGlobalFreq final
+    encodeFile (resultDir <> "/patternOccuranceG.json") $
+        report patternOccuranceG final
+    encodeFile (resultDir <> "/patternHighlightedInCorpus.json") $
+        report highlightPatternInCorpus final
 
 -- compressCorpus :: _ => (FilePath -> IO [a]) ->
 --     (a -> b) ->
@@ -146,36 +133,38 @@ reportCompression resultDir slfp = do
 
 runExperiment ::
     (_) =>
-    (FilePath -> IO [a]) ->
-    (a -> b) ->
-    (a -> Maybe (Tree r)) ->
+    (FilePath -> IO (Maybe [(k, ParseTree r nt t)])) ->
     FilePath ->
     FilePath ->
     IO ()
-runExperiment readCorpus getName getTree inputFile outputDir = do
-    ps <- readCorpus inputFile
-    reportCompression outputDir $ mkCorpusSLFP getName getTree ps
+runExperiment readRuleTree inputFile outputDir = do
+    psMaybe <- readRuleTree inputFile
+    case psMaybe of
+        Nothing -> do
+            print $ "fail to read " <> inputFile
+        Just ps -> reportCompression outputDir $ initSLFP (f ps)
+  where
+    f = mapMaybe (\(name, pt) -> (name,) <$> g pt) -- fmap $ fmap  $ second parseTreeToRuleTree
+    g = parseTreeToRuleTree
 
-ismirExperiment :: IO ()
-ismirExperiment = do
-    p <- takeDirectory . takeDirectory <$> getExecutablePath
+jazzHarmonyExperiment :: FilePath -> FilePath -> IO ()
+jazzHarmonyExperiment =
     runExperiment
-        parsePieces
-        title
-        tRule
-        (p <> "/Experiment/DataSet/treebank.json")
-        (p <> "/Experiment/Result/")
+        (decodeFileStrict 
+            @[(String, ParseTree RuleNames ChordLabel ChordLabel)])
 
+rhythmExperiment :: FilePath -> FilePath -> IO ()
+rhythmExperiment =
+    runExperiment
+        ( decodeFileStrict
+            @[(String, ParseTree RhythmRule RhythmNT RhythmTerminal)]
+        )
 
--- M_{1} &= \langle \_,1 \rangle &
-
--- plotCompressionExample = do
---     ps <-  pieces
---     let original = corpusSLFP $ take 5 ps
---         final = fixedPoint compressG original
---         decompressed = fixedPoint deCompressG final
---     writeSVG "JazzCorpusCompression(compressed).svg" (plotSLFP final)
-
---     writeSVG "JazzCorpusCompression(decompressed).svg" (plotSeqDiagrams $ plotSLFP <$> iterateFs [deCompressG |i<- [1 ..] ] final)
-
--- -- >>>  plotCompressionExample
+runAllExperiments :: FilePath -> IO ()
+runAllExperiments experimentFolder = do
+    jazzHarmonyExperiment
+        (experimentFolder <> "/DataSet/Harmony/ParseTrees.json")
+        (experimentFolder <> "/Result/Harmony")
+    rhythmExperiment
+        (experimentFolder <> "/DataSet/Rhythm/Classical/ParseTrees.json")
+        (experimentFolder <> "/Result/Rhythm/Classical")
