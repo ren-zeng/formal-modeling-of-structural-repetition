@@ -19,6 +19,8 @@ import GHC.Generics (Generic)
 import Data.Aeson
 import Prettyprinter (Pretty (..), (<+>))
 import qualified Prettyprinter as Pretty
+import qualified Data.Set as Set
+import Data.Set (Set)
 
 {- | Accumulated results of applying a list of f :: a->a  on a initial value.
 The output list is finite if we can reach a fixpoint of f.
@@ -48,7 +50,10 @@ matchR m (Node x ts) = m == inferMeta x (rootLabel <$> ts)
 
 data Pattern a
   = Comp Int a a
-  deriving (Show, Eq, Ord)
+  deriving (Show, Eq, Ord,Generic)
+
+instance (FromJSON a) =>  FromJSON (Pattern a)
+instance (ToJSON a) =>  ToJSON (Pattern a)
 
 data Abstraction a
   = Constant a
@@ -58,6 +63,7 @@ data Abstraction a
 
 instance (FromJSON a) =>  FromJSON (Abstraction a)
 instance (ToJSON a) =>  ToJSON (Abstraction a)
+
 
 instance Pretty a => Pretty (Abstraction a) where
   pretty  (Constant x) = pretty x
@@ -70,6 +76,19 @@ instance Size (Abstraction a) where
     Constant _ -> 1
     Var _ -> 1
     _ `With` (_, xs) -> 2 + length xs
+
+
+getVariables :: Abstraction a -> Set String
+getVariables = \case 
+  Constant _ -> mempty 
+  Var x -> Set.singleton x 
+  x `With` (_,ys) -> foldMap getVariables (x:ys)
+
+getPatternOrRules :: _ => Abstraction r -> Set (Either r String)
+getPatternOrRules = \case
+  Constant x -> Set.singleton $ Left x
+  Var x -> Set.singleton $ Right x
+  x `With` (_, ys) -> foldMap getPatternOrRules (x:ys)
 
 class a `CachedBy` b where
   retrieve :: Map.Map b a

@@ -21,7 +21,7 @@ import Data.Aeson
 import Data.Foldable (Foldable (toList))
 import Data.Functor (($>))
 import Data.List hiding (head)
-import Data.Maybe (mapMaybe)
+import Data.Maybe (mapMaybe, fromMaybe)
 import Data.Text (Text, pack, toUpper)
 import Data.Tree (flatten)
 import Data.Tree qualified
@@ -220,6 +220,11 @@ addTerminal :: Data.Tree.Tree ChordLabel -> SymbolTree ChordLabel ChordLabel
 addTerminal  = cata $ \case 
   NodeF x [] -> NTNode x [TLeaf x]
   NodeF x ts -> NTNode x ts
+
+getSymbolTree :: Piece -> SymbolTree ChordLabel ChordLabel  
+getSymbolTree p = addTerminal 
+  $ fromMaybe (error "parse error") 
+  $ treeChordLabel (chordTree p)
 
 pChordLabel :: MyParser ChordLabel
 pChordLabel = do

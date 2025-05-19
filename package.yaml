@@ -37,6 +37,7 @@ dependencies:
 - recursion-schemes
 - vector
 - directory
+- mustache
 ghc-options:
 - -Wall
 - -Wcompat

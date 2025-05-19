@@ -26,7 +26,7 @@ import Text.Read (readMaybe)
 import Visualization.Text
 import Visualization.Tree
 import Core.ParseTree
-import Preprocessing.AbstractDataSet hiding (Piece)
+import Preprocessing.Preprocess hiding (Piece)
 
 data RhythmTree
     = RhythmLeaf String Rational
@@ -148,13 +148,7 @@ parseRhythmNT _ = empty
 -- >>> parse parseRhythmNT "[0:1/4:-1/8]"
 -- Success (0 % 1,1 % 4,(-1) % 8)
 
-toMaybe :: Result a -> Maybe a
-toMaybe (Success x) = Just x
-toMaybe _ = Nothing
 
-isSuccess :: Result a -> Bool
-isSuccess (Success x) = True
-isSuccess _ = False
 
 parseRhythmTree :: _ -> Maybe RhythmTree
 parseRhythmTree = decode
@@ -175,7 +169,7 @@ drawRhythmTree :: RhythmTree -> Diagram BackEnd
 drawRhythmTree t = Diagram.bg white $ treeDiagram Prelude.id $ drawText . show <$> rhythmTreeToTree t
 
 
-getParseTree :: Piece -> Maybe (ParseTree RhythmRule RhythmNT RhythmTerminal)
+getParseTree :: Piece -> ParseTree (Maybe RhythmRule) RhythmNT RhythmTerminal
 getParseTree =
     inferRuleTree inferRule
         . correctSymbolTree

@@ -9,24 +9,19 @@ import Compression.SLFP
 import Data.Aeson
 import Data.List (sortOn)
 import qualified Data.Map as Map hiding (filter, mapMaybe, take)
-import Data.Tree
 import GHC.Generics hiding (Meta)
 import Grammar.JazzHarmony.JazzGrammar
-import Preprocessing.JazzHarmony.TreeBankLoader
 import Prettyprinter
-import RIO.FilePath
-import System.Environment (getExecutablePath)
 
 -- import Visualization.TreeVisualizer
 
-import Control.Arrow
-import Control.Exception (throw, throwIO)
 import Core.ParseTree
 import Debug.Trace (traceM)
 import Experiment.TismirExperiment
-import GHC.IO.Exception (IOException (IOError))
 import Grammar.JazzHarmony.MusicTheory
 import Grammar.Rhythm.RhythmGrammar (RhythmNT, RhythmRule, RhythmTerminal)
+import Data.Set (Set)
+import Preprocessing.Preprocess
 
 proofTreeFolderPath :: String
 proofTreeFolderPath = "experiment/data/ProofTrees"
@@ -94,14 +89,37 @@ reportCompression resultDir slfp = do
         (resultDir <> "sizeCurve.json")
         (uncurry SizeCurve <$> zip [1 ..] (size <$> steps))
 
-    encodeFile (resultDir <> "/patternDependents.json") $
-        report patternDependents final
-    encodeFile (resultDir <> "/patternGlobalFreq.json") $
-        report patternGlobalFreq final
-    encodeFile (resultDir <> "/patternOccuranceG.json") $
-        report patternOccuranceG final
-    encodeFile (resultDir <> "/patternHighlightedInCorpus.json") $
-        report highlightPatternInCorpus final
+
+    -- encodeFile (resultDir <> "/patternHighlightedInCorpus.json") $
+    --     report highlightPatternInCorpus final
+
+    let patternInfo = report mkPatternInfo final
+            
+    encodeFile (resultDir <> "/patternInfo.json") patternInfo
+
+type PatternID = String
+
+
+
+data PatternInfo r k = PatternInfo {
+    definition :: Pattern (Abstraction r) , 
+    dependents :: Set PatternID,
+    dependenciesDirect :: Set PatternID,
+    globalFreq :: Int,
+    occuranceInCorpus :: Set k
+}
+    deriving (Generic, Show)
+
+instance (ToJSON k,ToJSON r) => ToJSON (PatternInfo r k)
+instance (FromJSON k,FromJSON r, Ord k) => FromJSON (PatternInfo r k)
+
+mkPatternInfo :: SLFP r k -> PatternID -> PatternInfo r k
+mkPatternInfo slfp pId = PatternInfo
+    (globalPatterns slfp Map.! pId)
+    (patternDependents slfp pId)
+    (directDependencies slfp pId)
+    (patternGlobalFreq slfp pId)
+    (patternOccuranceG slfp pId)
 
 -- compressCorpus :: _ => (FilePath -> IO [a]) ->
 --     (a -> b) ->
@@ -140,8 +158,7 @@ runExperiment ::
 runExperiment readRuleTree inputFile outputDir = do
     psMaybe <- readRuleTree inputFile
     case psMaybe of
-        Nothing -> do
-            print $ "fail to read " <> inputFile
+        Nothing -> print $ "fail to read " <> inputFile
         Just ps -> reportCompression outputDir $ initSLFP (f ps)
   where
     f = mapMaybe (\(name, pt) -> (name,) <$> g pt) -- fmap $ fmap  $ second parseTreeToRuleTree
@@ -150,7 +167,7 @@ runExperiment readRuleTree inputFile outputDir = do
 jazzHarmonyExperiment :: FilePath -> FilePath -> IO ()
 jazzHarmonyExperiment =
     runExperiment
-        (decodeFileStrict 
+        (decodeFileStrict
             @[(String, ParseTree RuleNames ChordLabel ChordLabel)])
 
 rhythmExperiment :: FilePath -> FilePath -> IO ()

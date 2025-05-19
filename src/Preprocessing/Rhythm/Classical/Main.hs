@@ -12,16 +12,19 @@ import Prettyprinter
 
 import Core.ParseTree
 
+import Control.Applicative (Alternative (empty))
+import Data.Aeson (FromJSON, ToJSON, encodeFile)
+import Data.Maybe (mapMaybe)
+import GHC.Generics
+import Grammar.JazzHarmony.JazzGrammar
+import Grammar.Rhythm.RhythmGrammar
+import Preprocessing.Preprocess (ParseTreeReport (..), inferRuleTree, plotProofTree, preprocess, titleWithParseTree, withoutCatchAll)
+import Preprocessing.Rhythm.Classical.TreeBankLoader
 import RIO.Directory
 import Text.Printf
 import Visualization.ProofTree
 import Visualization.SymbolTree
 import Visualization.Text
-import Preprocessing.Rhythm.Classical.TreeBankLoader
-import Grammar.Rhythm.RhythmGrammar
-import Preprocessing.AbstractDataSet (inferRuleTree, titleWithParseTree)
-import Data.Maybe (mapMaybe)
-import Data.Aeson (encodeFile)
 
 plotDecodedJSON :: FilePath -> Piece -> IO ()
 plotDecodedJSON path p =
@@ -39,21 +42,20 @@ plotCorrection path p = do
         (Diagram.mkSizeSpec2D (Just 1000) (Just 1000))
         (Diagram.bg white . Diagram.vsep 1 $ drawSymbolTree (drawText . show . pretty) <$> [orginSymbolTree, correctedSymbolTree])
 
-plotProofTree :: FilePath -> Piece -> IO ()
-plotProofTree path p = case getParseTree p of
-    Nothing -> return ()
-    Just parseTree ->
-        renderSVG
-            (path <> printf "/ProofTrees/%s.svg" (pieceId p))
-            (Diagram.mkSizeSpec2D (Just 1000) (Just 1000))
-            (proofDiagram $ parseTreeToProofTree parseTree)
-  where
-    proofDiagram t =
-        drawProofTree
-            (drawText . show . pretty)
-            (drawText . show . pretty)
-            t
-            # Diagram.bg white
+-- plotProofTree :: FilePath -> Piece -> IO ()
+-- plotProofTree path p =
+--     renderSVG
+--         (path <> printf "/ProofTrees/%s.svg" (pieceId p))
+--         (Diagram.mkSizeSpec2D (Just 1000) (Just 1000))
+--         (proofDiagram $ parseTreeToProofTree parseTree)
+--   where
+--     parseTree = getParseTree p
+--     proofDiagram t =
+--         drawProofTree
+--             (drawText . show . pretty)
+--             (drawText . show . pretty)
+--             t
+--             # Diagram.bg white
 
 reportPreprocessing :: FilePath -> FilePath -> IO ()
 reportPreprocessing datasetPath outPath = do
@@ -62,7 +64,8 @@ reportPreprocessing datasetPath outPath = do
     forM_ folderNames (\x -> createDirectoryIfMissing False $ outPath <> "/" <> x)
     mapM_ (plotDecodedJSON outPath) pieces
     mapM_ (plotCorrection outPath) pieces
-    mapM_ (plotProofTree outPath) pieces
+
+-- mapM_ (plotProofTree outPath) pieces
 
 preprocessRhythmCorpus :: FilePath -> IO ()
 preprocessRhythmCorpus folder =
@@ -73,14 +76,14 @@ preprocessRhythmCorpus folder =
 dataSetFolder :: FilePath
 dataSetFolder = "Experiment/DataSet/Rhythm/Classical"
 
-
-
-
 main :: IO ()
-main = do 
-    ps <- load (dataSetFolder <> "/RhythmTreeBank.json")
-    let xs = mapMaybe (titleWithParseTree getParseTree pieceId) ps
-    encodeFile (dataSetFolder <> "/ParseTrees.json") xs
-    preprocessRhythmCorpus dataSetFolder
+main =
+    preprocess
+        (load $ dataSetFolder <> "/RhythmTreeBank.json")
+        getParseTree
+        pieceId
+        dataSetFolder
 
 -- >>> main
+-- Experiment/DataSet/Rhythm/Classical/InferedParseTrees: removeDirectory: unsatisfied constraints (Directory not empty)
+

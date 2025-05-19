@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Variable Dependency Graph</title>
+    <script src="https://d3js.org/d3.v7.min.js"></script>
+    <style>
+        .node text {
+            font: 10px sans-serif;
+            pointer-events: none;
+        }
+        .link {
+            stroke: #999;
+            stroke-opacity: 0.6;
+        }
+        .node circle {
+            stroke: #fff;
+            stroke-width: 1.5px;
+        }
+    </style>
+</head>
+<body height= 100%, overflow= hidden>
+    <div id="dependencies", style="display: flex; flex-direction: row; align-items: center; justify-content: center;"></div>
+    <svg width="800" height="600"></svg>
+    <script>    
+
+    // Set the dimensions and margins of the graph
+    const margin = { top: 100, right: 30, bottom: 100, left: 60 };
+    const width = 800 - margin.left - margin.right;
+    const height = 800 - margin.top - margin.bottom;
+
+    // Create the SVG container
+    const svg = d3.select("#dependencies")
+        .append("svg")
+        .attr("width", width + margin.left + margin.right)
+        .attr("height", height + margin.top + margin.bottom)
+        .append("g")
+        .attr("transform", `translate(${margin.left},${margin.top})`);
+        // Sample data - replace with your actual dependencies
+    const data = {
+        "variables": [
+            { "id": "A", "parents": [] },
+            { "id": "B", "parents": ["A"] },
+            { "id": "C", "parents": ["A", "B"] },
+            { "id": "D", "parents": ["B"] },
+            { "id": "E", "parents": ["C", "D"] },
+            { "id": "F", "parents": ["E"] }
+        ]
+    };
+
+    // Process the data to create nodes and links
+    const nodes = data.variables.map(d => ({ id: d.id }));
+    const links = [];
+
+    data.variables.forEach(variable => {
+        variable.parents.forEach(parent => {
+            links.push({
+                source: parent,
+                target: variable.id
+            });
+        });
+    });
+    
+ 
+
+    // Create a group for the graph
+    const g = svg.append("g")
+        .attr("transform", "translate(50, 50)");
+
+    // Define arrow markers
+    svg.append("defs").append("marker")
+        .attr("id", "arrowhead")
+        .attr('viewBox', '0 -5 10 10')
+        .attr('refX', 7)
+        .attr('markerWidth', 10)
+        .attr('markerHeight', 10)
+        .attr('orient', 'auto')
+        .append('svg:path')
+        .attr('d', 'M0,-5L10,0L0,5');
+       
+
+    // Create the force simulation
+    const simulation = d3.forceSimulation(nodes)
+        .force("link", d3.forceLink(links).id(d => d.id).distance(100))
+        .force("charge", d3.forceManyBody().strength(-500))
+        .force("center", d3.forceCenter(width / 2 - 50, height / 2 - 50))
+        .force("collision", d3.forceCollide().radius(30));
+
+    // Create the links
+    const link = g.append("g")
+        .selectAll("line")
+        .data(links)
+        .enter().append("line")
+        .attr("class", "link")
+        .attr("marker-end", "url(#arrowhead)");
+
+    // Create the nodes
+    const node = g.append("g")
+        .selectAll("g")
+        .data(nodes)
+        .enter().append("g")
+        // .call(d3.drag()
+        //     .on("start", dragstarted)
+        //     .on("drag", dragged)
+        //     .on("end", dragended));
+
+    node.append("circle")
+        .attr("r", 10)
+        .attr("fill", "#69b3a2");
+
+    node.append("text")
+        .attr("dy", -15)
+        .attr("text-anchor", "middle")
+        .text(d => d.id);
+
+    // Update positions on each tick
+    simulation.on("tick", () => {
+        link
+            .attr("x1", d => d.source.x)
+            .attr("y1", d => d.source.y)
+            .attr("x2", d => d.target.x)
+            .attr("y2", d => d.target.y);
+
+        node
+            .attr("transform", d => `translate(${d.x},${d.y})`);
+    });
+
+    // Drag functions
+    function dragstarted(event, d) {
+        if (!event.active) simulation.alphaTarget(0.3).restart();
+        d.fx = d.x;
+        d.fy = d.y;
+    }
+
+    function dragged(event, d) {
+        d.fx = event.x;
+        d.fy = event.y;
+    }
+
+    function dragended(event, d) {
+        if (!event.active) simulation.alphaTarget(0);
+        d.fx = null;
+        d.fy = null;
+    }
+    </script>
+</body>
+</html>
+

@@ -1,33 +1,27 @@
 module Preprocessing.JazzHarmony.Main where
 
-import Control.Arrow
 import Core.ParseTree
-import Data.Aeson (encodeFile)
-import Data.Maybe
+import Data.Aeson.Types
 import Grammar.JazzHarmony.JazzGrammar
 import Grammar.JazzHarmony.MusicTheory
-import Preprocessing.JazzHarmony.TreeBankLoader (Piece (title), parsePieces)
-import RIO.FilePath (takeDirectory)
+import Preprocessing.JazzHarmony.TreeBankLoader
+import Preprocessing.Preprocess
 
-treebankPath :: String
-treebankPath = "Experiment/DataSet/Harmony/treebank.json"
+getParseTree :: Piece -> ParseTree (Maybe RuleNames) ChordLabel ChordLabel
+getParseTree = inferRuleTree inferRule . getSymbolTree
 
-proofTreeFolderPath :: String
-proofTreeFolderPath = "Experiment/DataSet/Harmony/ProofTrees"
-
-titleWithParseTree ::
-    Piece ->
-    Maybe (String, ParseTree RuleNames ChordLabel ChordLabel)
-titleWithParseTree p = do
-    t <- pieceParseTree p
-    return (title p, t)
+load :: FilePath -> IO [Piece]
+load path = do
+    Just r <- decodeTreeBank path
+    let ps = [p | Success p <- r]
+    return ps
 
 main :: IO ()
-main = do
-    ps <- parsePieces treebankPath
-    encodeFile
-        (takeDirectory treebankPath <> "/ParseTrees.json")
-        (mapMaybe titleWithParseTree ps)
-    plotAllProofTree ps proofTreeFolderPath
+main =
+    preprocess
+        (load "Experiment/DataSet/Harmony/treebank.json")
+        getParseTree
+        title
+        "Experiment/DataSet/Harmony"
 
 -- >>> main

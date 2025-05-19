@@ -6,6 +6,7 @@ module Experiment.TismirExperiment (
 
     -- * (Pattern dependencies)
     patternDependents,
+    directDependencies,
 
     -- * (Where are the patterns?) pattern usage
     patternGlobalFreq,
@@ -43,6 +44,7 @@ import Visualization.BackEnd (BackEnd)
 import Visualization.Text
 import Visualization.Tree (treeDiagram)
 import Prettyprinter (pretty)
+import Data.Aeson
 
 
 type MetaID = String
@@ -129,6 +131,12 @@ directDependents slfp p =
             (matchPattern p)
             (globalPatterns slfp)
 
+directDependencies :: _ => SLFP r k -> PatternID -> Set PatternID
+directDependencies slfp p = case globalPatterns slfp Map.! p of 
+    Comp i x y -> foldMap  getVariables [x,y]
+
+
+
 -- | the set of pieces that contains the pattern
 patternOccuranceG ::
     (_) =>
@@ -165,9 +173,17 @@ allDependents slfp = Map.fromList $ (id &&& patternDependents slfp) <$> allPatte
   where
     allPatterns = Map.keys (globalPatterns slfp)
 
+
+
+data KeyValuePair k v = KeyValuePair {name::k,value:: v}
+    deriving (Generic)
+
+instance (ToJSON k,ToJSON v) => ToJSON (KeyValuePair k v)
+instance (FromJSON k,FromJSON v) => FromJSON (KeyValuePair k v)
+
 -- helper function for reporting --
-report :: (SLFP a b -> PatternID -> c) -> SLFP a b -> [(PatternID, c)]
-report f slfp = (id &&& f slfp) <$> allPatterns slfp
+report :: (SLFP a b -> PatternID -> c) -> SLFP a b -> [KeyValuePair PatternID c]
+report f slfp = uncurry KeyValuePair . (id &&& f slfp) <$> allPatterns slfp
 
 -- visualization --
 

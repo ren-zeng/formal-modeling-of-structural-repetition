@@ -1,0 +1,15 @@
+<!DOCTYPE html>
+<meta charset="utf-8">
+<title>Hierarchical edge bundling</title>
+<link rel="stylesheet" type="text/css" href="./inspector.css">
+<body height= 100%, overflow= hidden>
+    <div id="myPlot", style="display: flex; flex-direction: row; align-items: center; justify-content: center;"></div>
+    <script type="module">
+
+    import define from "./index.js";
+    import {Runtime, Library, Inspector} from "./runtime.js";
+
+    const runtime = new Runtime();
+    const main = runtime.module(define, Inspector.into(document.body));
+
+    </script>

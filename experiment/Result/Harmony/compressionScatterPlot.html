@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <title>scatter</title>
+    <script src="https://d3js.org/d3.v7.min.js"></script>
+    <style>
+        .tooltip {
+            position: absolute;
+            background-color: white;
+            padding: 5px;
+            border: 1px solid #ddd;
+            pointer-events: none;
+        }
+    </style>
+</head>
+
+<body height= 100%, overflow= hidden>
+    <div id="scatter-plot", style="display: flex; flex-direction: row; align-items: center; justify-content: center;"></div>
+    <script>
+        // Set the dimensions and margins of the graph
+        const margin = { top: 100, right: 30, bottom: 100, left: 60 };
+        const width = 800 - margin.left - margin.right;
+        const height = 800 - margin.top - margin.bottom;
+
+        // Create the SVG container
+        const svg = d3.select("#scatter-plot")
+            .append("svg")
+            .attr("width", width + margin.left + margin.right)
+            .attr("height", height + margin.top + margin.bottom)
+            .append("g")
+            .attr("transform", `translate(${margin.left},${margin.top})`);
+
+        // Create tooltip div
+        const tooltip = d3.select("body").append("div")
+            .attr("class", "tooltip")
+            .style("opacity", 0);
+
+        // Load and process the data
+        d3.json("pieceSizeComparison.json").then(function (data) {
+            // Create scales
+            const x = d3.scaleLinear()
+                .domain([0, d3.max(data, d => d.originalSize)])
+                .range([0, width]);
+
+            const y = d3.scaleLinear()
+                .domain([0, d3.max(data, d => d.compressedSize)])
+                .range([height, 0]);
+
+            // Add X axis
+            svg.append("g")
+                .attr("transform", `translate(0,${height})`)
+                .call(d3.axisBottom(x))
+                .append("text")
+                .attr("x", width / 2)
+                .attr("y", 40)
+                .attr("fill", "black")
+                .style("font-size", "15")
+                .text("originalSize");
+               
+
+            // Add Y axis
+            svg.append("g")
+                .call(d3.axisLeft(y))
+                .append("text")
+                .attr("transform", "rotate(-90)")
+                .attr("y", -40)
+                .attr("x", -height / 2)
+                .attr("fill", "black")
+                .style("font-size", "15px")
+                .text("compressedSize");
+                
+
+            // Add dots
+            svg.selectAll("circle")
+                .data(data)
+                .join("circle")
+                .attr("cx", d => x(d.originalSize+Math.random()-0.5))
+                .attr("cy", d => y(d.compressedSize+Math.random()-0.5))
+                .attr("r", 6)
+                .style("fill", "grey")
+                .style("opacity", 0.7)
+                .on("mouseover", function (event, d) {
+                    d3.select(this)
+                        .style("fill", "#69b3a2")
+                        .attr("r", 6);
+
+                    tooltip.transition()
+                        .duration(0)
+                        .style("opacity", .9);
+
+                    tooltip.html(d.pieceName + "<br>" + d.originalSize + " → " + d.compressedSize)
+                        .style("left", (event.pageX + 10) + "px")
+                        .style("top", (event.pageY - 28) + "px");
+                })
+                .on("mouseout", function () {
+                    d3.select(this)
+                        .style("fill", "grey")
+                        .attr("r", 6);
+
+                    tooltip.transition()
+                        .duration(0)
+                        .style("opacity", 0);
+                });
+
+            const xExtent = d3.max(data, d => d.originalSize) 
+            const yExtent = d3.max(data, d => d.compressedSize) 
+            const minExtent = Math.min(xExtent,yExtent)
+            const oneToOne = [{ x: 0, y: 0 }, { x: minExtent, y: minExtent }];
+            const line = d3.line()
+                .x(d => x(d.x))
+                .y(d => y(d.y));
+            svg.append("path")
+                .attr("fill", "none")
+                .attr("stroke", "black")
+                .attr("stroke-width", 1)
+                .attr("d", line(oneToOne));
+
+            // Add title
+            svg.append("text")
+                .attr("x", width / 2)
+                .attr("y", -30)
+                .attr("text-anchor", "middle")
+                .style("font-size", "20px")
+                .text("compressionScatterPlot");
+        });
+    </script>
+</body>
+
+</html>

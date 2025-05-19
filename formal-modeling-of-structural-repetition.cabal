@@ -48,6 +48,7 @@ library
       Run
       Types
       Util
+      VisualHTML.ScatterPlot
   other-modules:
       Paths_formal_modeling_of_structural_repetition
   autogen-modules:
@@ -86,6 +87,7 @@ library
     , directory
     , megaparsec
     , musicology-pitch
+    , mustache
     , prettyprinter
     , recursion-schemes
     , rio >=0.1.12.0
@@ -136,6 +138,7 @@ executable formal-modeling-of-structural-repetition-exe
     , formal-modeling-of-structural-repetition
     , megaparsec
     , musicology-pitch
+    , mustache
     , optparse-simple
     , prettyprinter
     , recursion-schemes
@@ -190,6 +193,7 @@ test-suite formal-modeling-of-structural-repetition-test
     , hspec
     , megaparsec
     , musicology-pitch
+    , mustache
     , prettyprinter
     , recursion-schemes
     , rio >=0.1.12.0

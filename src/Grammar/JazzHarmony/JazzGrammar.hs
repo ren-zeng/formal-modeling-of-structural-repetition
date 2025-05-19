@@ -2,31 +2,18 @@
 
 module Grammar.JazzHarmony.JazzGrammar where
 
-import Control.Arrow
 import Data.Aeson
-import Data.Tree
 import GHC.Generics (Generic)
-import Musicology.Pitch
 import Grammar.JazzHarmony.MusicTheory
-import Preprocessing.JazzHarmony.TreeBankLoader (Piece (title), chordTree, parsePieces, treeChordLabel, addTerminal)
+import Musicology.Pitch
+
 
 import Control.Monad
-import Core.ProofTree (ProofTree)
-import Data.Foldable
-import Diagrams (mkWidth,bg, frame)
-import Diagrams.Backend.SVG (renderSVG)
-import Text.Printf
-import Visualization.ProofTree
-import Visualization.Text
-import Core.ParseTree (inferParseTree, ParseTree (..), ParseTreeF (..))
+import Core.ParseTree (ParseTree (..), inferParseTree)
 import Core.SymbolTree
-import Visualization.ParseTree (drawParseTree)
-import Data.Functor.Foldable
+import Data.Foldable
+
 import Prettyprinter
-import Diagrams.Prelude (white)
-import Data.Maybe
-
-
 
 (/\) = (&&)
 
@@ -64,7 +51,6 @@ instance FromJSON ProlKind
 data RuleNames = Prol ProlKind | Prep PrepKind | Term | Ɂ
   deriving (Show, Eq, Generic, Ord)
 
-
 instance ToJSON RuleNames
 
 instance FromJSON RuleNames
@@ -73,7 +59,6 @@ instance Pretty RuleNames where
   pretty (Prol k) = pretty k
   pretty (Prep k) = pretty k
   pretty Term = "Term"
-  pretty Ɂ = "?"
 
 data AbstractRule = AbstractRule RuleNames deriving (Eq, Generic)
 
@@ -118,6 +103,11 @@ isMajor :: Quality -> Bool
 isMajor (Maj, Min, _) = True
 isMajor _ = False
 
+-- >>> toMidi (g' nat `pto`  d' nat) 
+-- 7
+
+
+
 satisfyRule :: RuleNames -> (ChordLabel, ChordLabel) -> ChordLabel -> Bool
 satisfyRule r (x, y) z = case r of
   Prol Repeat -> (x =~ z) /\ (y =~ z)
@@ -126,29 +116,39 @@ satisfyRule r (x, y) z = case r of
   Prol I_III -> (x == z) /\ (x `relMinorOf` y)
   Prol III_I -> (y == z) /\ (y `relMinorOf` x)
   Prep V_I ->
-    (y == z)
-      /\ (root y `pto` root x == fifth')
-      /\ (quality x == dom7)
+    or
+      [ (y == z)
+          /\ ( toMidi (root x `pfrom` root y) == 7)
+          /\ (quality x `elem` [dom7,maj7,min7])
+      , and
+          [ (y == z)
+          , (toMidi (root x `pto` root y) `elem` [1,4,7,10])
+          -- , (quality x == o7)
+          ]
+      ]
   Prep Diatonic5th ->
     (y == z)
-      /\ (root y `pto` root x == fifth')
+      /\ (root x `pfrom` root y == fifth')
       /\ (quality x /= dom7)
   Prep IV_I ->
     (y == z)
-      /\ (root y `pto` root x == fourth')
+      /\ (toMidi (root x `pfrom` root y) == 5)
       /\ (quality x `elem` [maj7, min7, dom7])
-  Prep TritoneSub ->
-    (y == z)
-      /\ (root y `pto` root x `elem` [minor second', aug unison])
-  -- (quality x == dom7)
-  Prep Backdoor ->
-    (y == z)
-      /\ (root x `pto` root y == major second')
-  -- (quality x == dom7)
+  Prep TritoneSub -> and 
+    [
+      (y == z),
+      (toMidi (root x `pfrom` root y) == 1)
+      -- (quality x == dom7)
+    ]
   Prep IV_V ->
     (y == z)
-      /\ (root x `pto` root y == major second')
-      /\ (quality y == dom7)
+      /\ ( (root x `pto` root y) == major second')
+  Prep Backdoor ->
+    (y == z)
+      /\ (toMidi (root x `pto` root y) == 2)
+  -- (quality x == dom7)
+  
+      
   Prep VI_V ->
     (y == z)
       /\ ( (root y `pto` root x == major second') /\ (quality x == min7)
@@ -158,12 +158,6 @@ satisfyRule r (x, y) z = case r of
   Prol Octatonic -> (x ~~ z) /\ (y ~~ z)
   Prol Hexatonic -> (x <~> z) /\ (y <~> z)
   Term -> False
-  Ɂ -> True
-
-unExplained :: Tree RuleNames -> Bool
-unExplained t = Ɂ `elem` t
-
-
 
 -- inferRuleTree' :: Tree ChordLabel -> Tree (ChordLabel, RuleNames)
 -- inferRuleTree' (Node x []) = Node (x, Term) []
@@ -193,30 +187,26 @@ unExplained t = Ɂ `elem` t
 -- inferRuleTree' _ = error "encountered non-binary split"
 
 inferRule :: ChordLabel -> [Symbol ChordLabel t] -> Maybe RuleNames
-inferRule nt [T _] = Just $ Term  
-inferRule nt syms = do 
-  [x,y] <- mapM extractNT syms
-  find (\rule -> satisfyRule rule (x,y) nt) 
+inferRule nt [T _] = Just $ Term
+inferRule nt syms = do
+  [x, y] <- mapM extractNT syms
+  find
+    (\rule -> satisfyRule rule (x, y) nt)
     [ Prol Repeat
-      , Prol I_VI
-      , Prol VI_I
-      , Prol I_III
-      , Prol III_I
-      , Prep V_I
-      , Prep Diatonic5th
-      , Prep IV_I
-      , Prep IV_V
-      , Prep VI_V
-      , Prep TritoneSub
-      , Prep Backdoor
-      , Prol Octatonic
-      , Prol Hexatonic
-      , Ɂ
-      ]
-
-
-
-
+    , Prol I_VI
+    , Prol VI_I
+    , Prol I_III
+    , Prol III_I
+    , Prep V_I
+    , Prep Diatonic5th
+    , Prep IV_I
+    , Prep IV_V
+    , Prep VI_V
+    , Prep TritoneSub
+    , Prep Backdoor
+    , Prol Octatonic
+    , Prol Hexatonic
+    ]
 
 -- -- | proof tree with detailed rules
 -- annotatedProofTree :: Tree ChordLabel -> Tree (String, String)
@@ -226,38 +216,18 @@ inferRule nt syms = do
 -- annotatedProofTree' :: Tree ChordLabel -> Tree (String, String)
 -- annotatedProofTree' t = zipTree (display <$> t) (show . AbstractRule <$> inferRuleTree t)
 
-pieceSymbolTree :: Piece -> Maybe (SymbolTree ChordLabel ChordLabel)
-pieceSymbolTree  = (return . addTerminal) <=< (treeChordLabel . chordTree)
-
-pieceParseTree :: Piece -> Maybe (ParseTree RuleNames ChordLabel ChordLabel)
-pieceParseTree = inferParseTree inferRule <=< pieceSymbolTree
-
-
-plotAllProofTree :: (Foldable t) => t Piece -> FilePath -> IO ()
-plotAllProofTree ps outFolder = do
-  forM_ ps $ \p ->
-    case pieceParseTree p of 
-      Nothing -> pure () 
-      Just t -> 
-        renderSVG
-          (printf "%s/(proof) %s.svg" outFolder (title p))
-          (mkWidth 1000)
-          (Diagrams.bg white $ drawParseTree (frame 0.25 . drawText .  show . pretty) (drawText . show.pretty) t)
 
 
 -- writeAllParseTree :: FilePath -> FilePath -> IO ()
 -- writeAllParseTree dataPath outPath = do
 --   ps <- parsePieces dataPath
 --   encodeFile (outPath <> "/allProofTrees.json") (pieceParseTree <$> ps)
---   plotAllProofTree ps $ outPath 
+--   plotAllProofTree ps $ outPath
 
-
--- reportProofAllProofTree :: IO () 
+-- reportProofAllProofTree :: IO ()
 -- reportProofAllProofTree = writeAllParseTree
 --     "Experiment/DataSet/treebank.json"
 --     "Experiment/DataSet/ProofTrees"
-
-
 
 -- plotSimpleRulePatternReport = do
 --     ps <- pieces
@@ -272,14 +242,5 @@ plotAllProofTree ps outFolder = do
 --     case Just g of
 --         Just g -> renderSVG "(SimpleRule) PatternReport.svg" (dims2D 1000 1000) $ plotDigramStatistics ps' (digramStatistic' g ) -- renderSVG "(SimpleRule) DependencyAnalysis.svg" (dims2D 10000 10000)  (plotDependency g)
 --         Nothing -> pure ()
-
-parseTreeToRuleTree :: ParseTree r nt t 
-  -> Maybe (Tree r)
-parseTreeToRuleTree = \case 
-  Leaf _ -> Nothing 
-  ParseTree _ r ts -> return $ Node r  $ mapMaybe parseTreeToRuleTree ts 
-
-tRule :: Piece -> Maybe (Tree RuleNames)
-tRule = parseTreeToRuleTree <=< pieceParseTree 
 
 
