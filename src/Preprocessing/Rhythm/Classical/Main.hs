@@ -13,7 +13,7 @@ import Prettyprinter
 import Core.ParseTree
 
 import Control.Applicative (Alternative (empty))
-import Data.Aeson (FromJSON, ToJSON, encodeFile)
+import Data.Aeson (FromJSON, ToJSON, ToJSONKey, encodeFile)
 import Data.Maybe (mapMaybe)
 import GHC.Generics
 import Grammar.JazzHarmony.JazzGrammar
@@ -76,6 +76,8 @@ preprocessRhythmCorpus folder =
 dataSetFolder :: FilePath
 dataSetFolder = "Experiment/DataSet/Rhythm/Classical"
 
+
+
 main :: IO ()
 main =
     preprocess
@@ -85,5 +87,5 @@ main =
         dataSetFolder
 
 -- >>> main
--- Experiment/DataSet/Rhythm/Classical/InferedParseTrees: removeDirectory: unsatisfied constraints (Directory not empty)
+
 

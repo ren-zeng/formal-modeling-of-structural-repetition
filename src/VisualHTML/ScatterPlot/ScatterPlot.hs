@@ -6,6 +6,8 @@ import qualified Data.Text.IO as TIO
 import Prettyprinter (Doc)
 import Text.Mustache
 import Text.Printf
+import VisualHTML.MakeHTML
+import qualified Text.Mustache.Compile as ScatterPlot
 
 type D3JSCode = String
 
@@ -43,16 +45,11 @@ mkScatterConfigCompression x path =
         , _hoverInfo = "pieceName"
         }
 
-plotScatterCompression :: (_) => String -> FilePath -> FilePath -> IO ()
-plotScatterCompression figName dataPath outDir = do
-    let templateFile = "src/VisualHTML/ScatterPlot.mustache"
-    let config = mkScatterConfigCompression figName dataPath
-    eitherTemplate <- compileTemplate templateFile <$> TIO.readFile templateFile
-    case eitherTemplate of
-        Left e -> error $ show e
-        Right template -> do
-            let generatedHTML = substitute template config
-            TIO.writeFile (outDir <> "/" <> figureName config <> ".html") generatedHTML
+plotScatterCompression :: String -> FilePath -> FilePath -> IO ()
+plotScatterCompression x path = mkHTML 
+    "src/VisualHTML/ScatterPlot/ScatterPlot.mustache"
+    "compressionScatterPlot" 
+    (mkScatterConfigCompression x path)
 
 main = do
     mapM_

@@ -2,6 +2,7 @@
 {-# OPTIONS_GHC -Wno-unrecognised-pragmas #-}
 
 {-# HLINT ignore "Use &&" #-}
+{-# HLINT ignore "Use ||" #-}
 
 module Grammar.Rhythm.RhythmGrammar where
 
@@ -95,11 +96,19 @@ data RhythmRule
     | Prepare
     | Shift TemporalDirection
     | Terminate
-    deriving (-- | AnythingGoes
-              Show, Eq, Ord, Generic)
+    deriving
+        ( -- | AnythingGoes
+          Show
+        , Eq
+        , Ord
+        , Generic
+        )
 
 instance ToJSON RhythmRule
 instance FromJSON RhythmRule
+
+instance ToJSONKey RhythmRule
+
 
 instance Pretty RhythmRule where
     pretty = pretty . show
@@ -117,12 +126,11 @@ satisfyRule SplitDrop x [x1] =
         [ and
             [ coda x1 == coda x
             , upbeat x1 + body x1 == upbeat x + body x
-            ],
-        and
+            ]
+        , and
             [ upbeat x1 == upbeat x
             , body x1 + coda x1 == body x + coda x
             ]
-        
         ]
 satisfyRule Split x [x1, x2, x3] =
     and
@@ -136,29 +144,30 @@ satisfyRule Prepare x [x1, x2] =
     and
         [ body x2 == body x
         , coda x2 == coda x
-        , upbeat x1 + body x1 + coda x1 + upbeat x2 == upbeat x
+        , coda x1 + upbeat x2 == 0
+        , upbeat x1 + body x1 == upbeat x
         ]
 satisfyRule (Shift Early) x [x1] =
     and
         [ body x1 == body x
-        , upbeat x1 == 0
-        , coda x1 == upbeat x + coda x
+        , upbeat x1 + coda x1 == upbeat x + coda x
+        , upbeat x1 < upbeat x
         ]
 satisfyRule (Shift Late) x [x1] =
     and
         [ body x1 == body x
-        , coda x1 == 0
-        , upbeat x1 == upbeat x + coda x
+        , upbeat x1 + coda x1 == upbeat x + coda x
+        , coda x1 < coda x
         ]
 satisfyRule _ _ _ = False
 
-
-testRule = inferRule (RhythmNT (5%16) (1%2) (-3%8)) 
-    [NT $ RhythmNT 0 (1%16) 0, NT $ RhythmNT (1%4) (1%2) (-3%8)]
+testRule =
+    inferRule
+        (RhythmNT (5 % 16) (1 % 2) (-3 % 8))
+        [NT $ RhythmNT 0 (1 % 16) 0, NT $ RhythmNT (1 % 4) (1 % 2) (-3 % 8)]
 
 -- >>> testRule
 -- Just Prepare
-
 
 inferRule :: RhythmNT -> [Symbol RhythmNT t] -> Maybe RhythmRule
 inferRule nt = \case
@@ -167,7 +176,12 @@ inferRule nt = \case
         nts <- mapM extractNT rhs -- making sure all symbols are NT
         find
             (\r -> satisfyRule r nt nts)
-            [Split, Prepare, Shift Early, Shift Late, SplitDrop]
+            [ Split
+            , Prepare
+            , Shift Early
+            , Shift Late
+            , SplitDrop
+            ]
 
 -- \case
 -- NTNode nt [TLeaf t] -> return $ ParseTree nt Terminate [Leaf t]

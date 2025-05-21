@@ -151,15 +151,15 @@ mkPatternInfo slfp pId = PatternInfo
 
 runExperiment ::
     (_) =>
-    (FilePath -> IO (Maybe [(k, ParseTree r nt t)])) ->
+    (FilePath -> IO (Either String [(k, ParseTree r nt t)])) ->
     FilePath ->
     FilePath ->
     IO ()
 runExperiment readRuleTree inputFile outputDir = do
-    psMaybe <- readRuleTree inputFile
-    case psMaybe of
-        Nothing -> print $ "fail to read " <> inputFile
-        Just ps -> reportCompression outputDir $ initSLFP (f ps)
+    psEither <- readRuleTree inputFile
+    case psEither of
+        Left e -> print $ e
+        Right ps -> reportCompression outputDir $ initSLFP (f ps)
   where
     f = mapMaybe (\(name, pt) -> (name,) <$> g pt) -- fmap $ fmap  $ second parseTreeToRuleTree
     g = parseTreeToRuleTree
@@ -167,14 +167,14 @@ runExperiment readRuleTree inputFile outputDir = do
 jazzHarmonyExperiment :: FilePath -> FilePath -> IO ()
 jazzHarmonyExperiment =
     runExperiment
-        (decodeFileStrict
-            @[(String, ParseTree RuleNames ChordLabel ChordLabel)])
+        (eitherDecodeFileStrict
+            @[(String, ParseTree (Maybe RuleNames) ChordLabel ChordLabel)])
 
 rhythmExperiment :: FilePath -> FilePath -> IO ()
 rhythmExperiment =
     runExperiment
-        ( decodeFileStrict
-            @[(String, ParseTree RhythmRule RhythmNT RhythmTerminal)]
+        ( eitherDecodeFileStrict
+            @[(String, ParseTree (Maybe RhythmRule) RhythmNT RhythmTerminal)]
         )
 
 runAllExperiments :: FilePath -> IO ()

@@ -1,0 +1,79 @@
+
+<!DOCTYPE html>
+<html>
+
+<head>
+    <title>scatter</title>
+    <script src="https://d3js.org/d3.v7.min.js"></script>
+    <style>
+        .tooltip {
+            position: absolute;
+            background-color: white;
+            padding: 5px;
+            border: 1px solid #ddd;
+            pointer-events: none;
+        }
+    </style>
+</head>
+
+<body height= 100%, overflow= hidden>
+    <div id="myPlot", style="display: flex; flex-direction: row; align-items: center; justify-content: center;"></div>
+    <script>
+
+    // Set the dimensions and margins of the graph
+    const margin = { top: 100, right: 30, bottom: 100, left: 60 };
+    const width = 800 - margin.left - margin.right;
+    const height = 800 - margin.top - margin.bottom;
+
+    // append the svg object to the body of the page
+    const svg = d3.select("#myPlot")
+      .append("svg")
+        .attr("width", width + margin.left + margin.right)
+        .attr("height", height + margin.top + margin.bottom)
+      .append("g")
+        .attr("transform", `translate(${margin.left}, ${margin.top})`);
+
+    // Parse the Data
+    d3.csv("pieceSizeComparison.json").then ( function(data) {
+
+      // sort data
+      data.sort(function(b, a) {
+        return a.Value - b.Value;
+      });
+
+      // X axis
+      const x = d3.scaleBand()
+        .range([ 0, width ])
+        .domain(data.map(d => d.originalSize))
+        .padding(0.2);
+      svg.append("g")
+        .attr("transform", `translate(0, ${height})`)
+        .call(d3.axisBottom(x))
+        .selectAll("text")
+          .attr("transform", "translate(-10,0)rotate(-45)")
+          .style("text-anchor", "end");
+
+      // Add Y axis
+      const y = d3.scaleLinear()
+        .domain([0, 13000])
+        .range([ height, 0]);
+      svg.append("g")
+        .call(d3.axisLeft(y));
+
+      // Bars
+      svg.selectAll("mybar")
+        .data(data)
+        .enter()
+        .append("rect")
+          .attr("x", d => x(d.originalSize))
+          .attr("y", d => y(d.compressedSize))
+          .attr("width", x.bandwidth())
+          .attr("height", d => height - y(d.originalSize))
+          .attr("fill", "#69b3a2")
+
+    })
+
+    </script> 
+  </body>
+
+</html>

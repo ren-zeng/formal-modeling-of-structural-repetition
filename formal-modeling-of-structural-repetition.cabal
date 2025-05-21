@@ -40,9 +40,9 @@ library
       Grammar.Rhythm.RhythmGrammar
       Import
       Main
-      Preprocessing.AbstractDataSet
       Preprocessing.JazzHarmony.Main
       Preprocessing.JazzHarmony.TreeBankLoader
+      Preprocessing.Preprocess
       Preprocessing.Rhythm.Classical.Main
       Preprocessing.Rhythm.Classical.TreeBankLoader
       Run

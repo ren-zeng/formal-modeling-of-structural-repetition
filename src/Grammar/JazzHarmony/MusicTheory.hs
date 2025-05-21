@@ -28,7 +28,7 @@ instance ToJSON ChordLabel
 instance FromJSON ChordLabel
 
 instance Pretty ChordLabel where
-  pretty = pretty . display
+  pretty =  pretty .display
 
 display :: ChordLabel -> String
 display (ChordLabel t q e) = printf "%s%s%s" (show t) (dq :: String) (de :: Extension)
