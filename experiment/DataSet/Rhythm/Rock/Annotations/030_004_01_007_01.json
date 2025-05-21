@@ -1,0 +1,103 @@
+{
+    "label": "S",
+    "children": [
+      {
+        "label": "S",
+        "children": [
+          {
+            "label": "P",
+            "children": [
+              {
+                "label": "P",
+                "children": [
+                  {
+                    "label": "1/4(2)",
+                    "children": []
+                  },
+                  {
+                    "label": "S",
+                    "children": [
+                      {
+                        "label": "1/4(1)",
+                        "children": []
+                      },
+                      {
+                        "label": "1/4(2)",
+                        "children": []
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "label": "1/4(0)",
+                "children": []
+              }
+            ]
+          },
+          {
+            "label": "1/4(2)",
+            "children": []
+          }
+        ]
+      },
+      {
+        "label": "S",
+        "children": [
+          {
+            "label": "P",
+            "children": [
+              {
+                "label": "S",
+                "children": [
+                  {
+                    "label": "S",
+                    "children": [
+                      {
+                        "label": "1/8(1)",
+                        "children": []
+                      },
+                      {
+                        "label": "1/8(3)",
+                        "children": []
+                      }
+                    ]
+                  },
+                  {
+                    "label": "1/4(2)",
+                    "children": []
+                  }
+                ]
+              },
+              {
+                "label": "1/2(0)",
+                "children": []
+              }
+            ]
+          },
+          {
+            "label": "P",
+            "children": [
+              {
+                "label": "3/8(1)",
+                "children": []
+              },
+              {
+                "label": "P",
+                "children": [
+                  {
+                    "label": "1/8(3)",
+                    "children": []
+                  },
+                  {
+                    "label": "1/1(0)",
+                    "children": []
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  }

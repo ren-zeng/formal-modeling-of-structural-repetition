@@ -1,0 +1,141 @@
+{
+    "label": "S",
+    "children": [
+      {
+        "label": "S",
+        "children": [
+          {
+            "label": "P",
+            "children": [
+              {
+                "label": "P",
+                "children": [
+                  {
+                    "label": "1/16(3)",
+                    "children": []
+                  },
+                  {
+                    "label": "A(1)",
+                    "children": [
+                      {
+                        "label": "S",
+                        "children": [
+                          {
+                            "label": "S",
+                            "children": [
+                              {
+                                "label": "1/8(4)",
+                                "children": []
+                              },
+                              {
+                                "label": "1/8(4)",
+                                "children": []
+                              }
+                            ]
+                          },
+                          {
+                            "label": "1/8(4)",
+                            "children": []
+                          }
+                        ]
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "label": "P",
+                "children": [
+                  {
+                    "label": "P",
+                    "children": [
+                      {
+                        "label": "1/16(4)",
+                        "children": []
+                      },
+                      {
+                        "label": "S",
+                        "children": [
+                          {
+                            "label": "1/16(3)",
+                            "children": []
+                          },
+                          {
+                            "label": "1/16(4)",
+                            "children": []
+                          }
+                        ]
+                      }
+                    ]
+                  },
+                  {
+                    "label": "11/32(0)",
+                    "children": []
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "label": "A(1)",
+            "children": [
+              {
+                "label": "1/4(5)",
+                "children": []
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "label": "P",
+        "children": [
+          {
+            "label": "P",
+            "children": [
+              {
+                "label": "P",
+                "children": [
+                  {
+                    "label": "1/32(5)",
+                    "children": []
+                  },
+                  {
+                    "label": "1/8(3)",
+                    "children": []
+                  }
+                ]
+              },
+              {
+                "label": "S",
+                "children": [
+                  {
+                    "label": "1/16(2)",
+                    "children": []
+                  },
+                  {
+                    "label": "A(3)",
+                    "children": [
+                      {
+                        "label": "1/16(4)",
+                        "children": []
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "label": "A(0)",
+            "children": [
+              {
+                "label": "9/8(3)",
+                "children": []
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  }

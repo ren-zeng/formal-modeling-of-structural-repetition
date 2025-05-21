@@ -1,0 +1,105 @@
+{
+    "label": "S",
+    "children": [
+      {
+        "label": "S",
+        "children": [
+          {
+            "label": "A(0)",
+            "children": [
+              {
+                "label": "P",
+                "children": [
+                  {
+                    "label": "S",
+                    "children": [
+                      {
+                        "label": "1/8(3)",
+                        "children": []
+                      },
+                      {
+                        "label": "1/8(2)",
+                        "children": []
+                      }
+                    ]
+                  },
+                  {
+                    "label": "7/8(3)",
+                    "children": []
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "label": "P",
+            "children": [
+              {
+                "label": "1/8(2)",
+                "children": []
+              },
+              {
+                "label": "A(0)",
+                "children": [
+                  {
+                    "label": "12/8(3)",
+                    "children": []
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "label": "P",
+        "children": [
+          {
+            "label": "P",
+            "children": [
+              {
+                "label": "S",
+                "children": [
+                  {
+                    "label": "1/16(3)",
+                    "children": []
+                  },
+                  {
+                    "label": "1/16(4)",
+                    "children": []
+                  }
+                ]
+              },
+              {
+                "label": "3/16(1)",
+                "children": []
+              }
+            ]
+          },
+          {
+            "label": "P",
+            "children": [
+              {
+                "label": "A(2)",
+                "children": [
+                  {
+                    "label": "1/4(4)",
+                    "children": []
+                  }
+                ]
+              },
+              {
+                "label": "A(0)",
+                "children": [
+                  {
+                    "label": "9/16(4)",
+                    "children": []
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  }
