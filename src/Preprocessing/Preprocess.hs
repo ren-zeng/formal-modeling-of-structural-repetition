@@ -22,6 +22,7 @@ import System.Directory
 import Text.Printf
 import Visualization.ParseTree
 import Visualization.Text
+import VisualHTML.SvgToPdf
 
 rootSymbol :: SymbolTree nt t -> Symbol nt t
 rootSymbol (TLeaf x) = T x
@@ -128,8 +129,27 @@ preprocess load getParseTree getPieceName outDir = do
     encodeFile (outDir <> "/RuleDistribution.json") $
         toCounts . histogram $
             foldMap (getAllRules . snd) xs
-    removeDirectoryRecursive $ outDir <> "/InferedParseTrees"
-    createDirectory $ outDir <> "/InferedParseTrees"
-    mapM_ (uncurry $ plotProofTree (outDir <> "/InferedParseTrees")) xs
+
+    let parseTreeDir = outDir <> "/InferedParseTrees"
+    let svgFolder = parseTreeDir <> "/svg"
+    let pdfFolder = parseTreeDir <> "/pdf"
+
+    emptyDirectory parseTreeDir
+ 
+
+    createDirectory  svgFolder
+    mapM_ (uncurry $ plotProofTree (outDir <> "/InferedParseTrees/svg")) xs
+
+    createDirectory  pdfFolder
+    svgFiles <- listDirectory svgFolder
+    mapM_ (\x -> convertSvgToPdf (svgFolder <> "/"<>x) pdfFolder)  svgFiles
+    
 
 instance (ToJSONKey a, ToJSON a) => ToJSONKey (Maybe a)
+
+
+emptyDirectory :: FilePath -> IO ()
+emptyDirectory path = do 
+    createDirectoryIfMissing False path 
+    removeDirectoryRecursive path 
+    createDirectory path

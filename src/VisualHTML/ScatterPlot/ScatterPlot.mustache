@@ -4,6 +4,7 @@
 <head>
     <title>scatter</title>
     <script src="https://d3js.org/d3.v7.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
     <style>
         .tooltip {
             position: absolute;
@@ -12,12 +13,91 @@
             border: 1px solid #ddd;
             pointer-events: none;
         }
+
+        .button-container {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            display: flex;
+            gap: 10px;
+        }
+
+        .save-button {
+            padding: 8px 16px;
+            background-color: #69b3a2;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+        }
+
+        .save-button:hover {
+            background-color: #85c7b5;
+        }
     </style>
 </head>
 
 <body height= 100%, overflow= hidden>
-    <div id="scatter-plot", style="display: flex; flex-direction: row; align-items: center; justify-content: center;"></div>
+    <div id="scatter-plot", style="display: flex; flex-direction: row; align-items: center; justify-content: center; position: relative;">
+        <div class="button-container">
+            <button class="save-button" onclick="saveSVG()">Save as SVG</button>
+            <button class="save-button" onclick="savePDF()">Save as PDF</button>
+        </div>
+    </div>
     <script>
+        // Function to save as SVG
+        function saveSVG() {
+            const svgData = document.querySelector('svg').outerHTML;
+            const blob = new Blob([svgData], { type: 'image/svg+xml' });
+            const url = URL.createObjectURL(blob);
+            const link = document.createElement('a');
+            link.href = url;
+            link.download = '{{figureName}}.svg';
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            URL.revokeObjectURL(url);
+        }
+
+        // Function to save as PDF
+        function savePDF() {
+            const svgElement = document.querySelector('svg');
+            const svgData = new XMLSerializer().serializeToString(svgElement);
+            const canvas = document.createElement('canvas');
+            const ctx = canvas.getContext('2d');
+            const img = new Image();
+
+            // Scale factor for higher resolution (4x)
+            const scaleFactor = 4;
+
+            img.onload = function () {
+                // Set canvas dimensions with scale factor for higher resolution
+                canvas.width = svgElement.width.baseVal.value * scaleFactor;
+                canvas.height = svgElement.height.baseVal.value * scaleFactor;
+
+                // Scale the context to match the increased canvas size
+                ctx.scale(scaleFactor, scaleFactor);
+                ctx.drawImage(img, 0, 0);
+
+                // Create PDF with proper dimensions
+                const imgData = canvas.toDataURL('image/png', 1.0);
+                const { jsPDF } = window.jspdf;
+                const pdf = new jsPDF({
+                    orientation: canvas.width > canvas.height ? 'landscape' : 'portrait',
+                    unit: 'px',
+                    format: [svgElement.width.baseVal.value, svgElement.height.baseVal.value],
+                    hotfixes: ['px_scaling']
+                });
+
+                // Add image at original dimensions but with high-resolution data
+                pdf.addImage(imgData, 'PNG', 0, 0, svgElement.width.baseVal.value, svgElement.height.baseVal.value, '', 'FAST');
+                pdf.save('{{figureName}}.pdf');
+            };
+
+            img.src = 'data:image/svg+xml;base64,' + btoa(unescape(encodeURIComponent(svgData)));
+        }
+
         // Set the dimensions and margins of the graph
         const margin = { top: 100, right: 30, bottom: 100, left: 60 };
         const width = 800 - margin.left - margin.right;
@@ -57,7 +137,7 @@
                 .attr("fill", "black")
                 .style("font-size", "15")
                 .text("{{xLabel}}");
-               
+
 
             // Add Y axis
             svg.append("g")
@@ -69,14 +149,14 @@
                 .attr("fill", "black")
                 .style("font-size", "15px")
                 .text("{{yLabel}}");
-                
+
 
             // Add dots
             svg.selectAll("circle")
                 .data(data)
                 .join("circle")
-                .attr("cx", d => x(d.{{_X}}+Math.random()-0.5))
-                .attr("cy", d => y(d.{{_Y}}+Math.random()-0.5))
+                .attr("cx", d => x(d.{{_X}} + Math.random() - 0.5))
+                .attr("cy", d => y(d.{{_Y}} + Math.random() - 0.5))
                 .attr("r", 6)
                 .style("fill", "grey")
                 .style("opacity", 0.7)
@@ -103,9 +183,9 @@
                         .style("opacity", 0);
                 });
 
-            const xExtent = d3.max(data, d => d.{{_X}}) 
-            const yExtent = d3.max(data, d => d.{{_Y}}) 
-            const minExtent = Math.min(xExtent,yExtent)
+            const xExtent = d3.max(data, d => d.{{_X}})
+            const yExtent = d3.max(data, d => d.{{_Y}})
+            const minExtent = Math.min(xExtent, yExtent)
             const oneToOne = [{ x: 0, y: 0 }, { x: minExtent, y: minExtent }];
             const line = d3.line()
                 .x(d => x(d.x))

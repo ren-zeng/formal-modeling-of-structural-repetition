@@ -1,4 +1,4 @@
-module VisualHTML.ScatterPlot where
+module VisualHTML.ScatterPlot.ScatterPlot where
 
 import Control.Exception
 

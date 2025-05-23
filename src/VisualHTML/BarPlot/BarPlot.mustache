@@ -2,26 +2,103 @@
 <html>
 
 <head>
-    <title>scatter</title>
+    <title>bar-plot</title>
     <script src="https://d3js.org/d3.v7.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
     <style>
         .tooltip {
             position: absolute;
             background-color: white;
-            padding: 5px;
+            padding: 8px;
             border: 1px solid #ddd;
             pointer-events: none;
+            font-size: 14px;
+        }
+        .button-container {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            display: flex;
+            gap: 10px;
+        }
+        .save-button {
+            padding: 8px 16px;
+            background-color: #69b3a2;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+        }
+        .save-button:hover {
+            background-color: #85c7b5;
         }
     </style>
 </head>
 
 <body height= 100%, overflow= hidden>
-    <div id="myPlot", style="display: flex; flex-direction: row; align-items: center; justify-content: center;"></div>
+    <div id="myPlot", style="display: flex; flex-direction: row; align-items: center; justify-content: center; position: relative;">
+        <div class="button-container">
+            <button class="save-button" onclick="saveSVG()">Save as SVG</button>
+            <button class="save-button" onclick="savePDF()">Save as PDF</button>
+        </div>
+    </div>
     <script>
+    // Function to save as SVG
+    function saveSVG() {
+        const svgData = document.querySelector('svg').outerHTML;
+        const blob = new Blob([svgData], {type: 'image/svg+xml'});
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = '{{figureName}}.svg';
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        URL.revokeObjectURL(url);
+    }
+
+    // Function to save as PDF
+    function savePDF() {
+        const svgElement = document.querySelector('svg');
+        const svgData = new XMLSerializer().serializeToString(svgElement);
+        const canvas = document.createElement('canvas');
+        const ctx = canvas.getContext('2d');
+        const img = new Image();
+        
+        // Scale factor for higher resolution (4x)
+        const scaleFactor = 4;
+        
+        img.onload = function() {
+            // Set canvas dimensions with scale factor for higher resolution
+            canvas.width = svgElement.width.baseVal.value * scaleFactor;
+            canvas.height = svgElement.height.baseVal.value * scaleFactor;
+            
+            // Scale the context to match the increased canvas size
+            ctx.scale(scaleFactor, scaleFactor);
+            ctx.drawImage(img, 0, 0);
+            
+            // Create PDF with proper dimensions
+            const imgData = canvas.toDataURL('image/png', 1.0);
+            const { jsPDF } = window.jspdf;
+            const pdf = new jsPDF({
+                orientation: canvas.width > canvas.height ? 'landscape' : 'portrait',
+                unit: 'px',
+                format: [svgElement.width.baseVal.value, svgElement.height.baseVal.value],
+                hotfixes: ['px_scaling']
+            });
+            
+            // Add image at original dimensions but with high-resolution data
+            pdf.addImage(imgData, 'PNG', 0, 0, svgElement.width.baseVal.value, svgElement.height.baseVal.value, '', 'FAST');
+            pdf.save('{{figureName}}.pdf');
+        };
+        
+        img.src = 'data:image/svg+xml;base64,' + btoa(unescape(encodeURIComponent(svgData)));
+    }
 
     // Set the dimensions and margins of the graph
-    const margin = { top: 100, right: 30, bottom: 100, left: 60 };
-    const width = 800 - margin.left - margin.right;
+    const margin = { top: 100, right: 30, bottom: 100, left: 200 };  // Increased left margin for labels
+    const width = 1000 - margin.left - margin.right;  // Increased width
     const height = 800 - margin.top - margin.bottom;
 
     // Create tooltip div
@@ -43,49 +120,52 @@
 
       // sort data
       data.sort(function(b, a) {
-        return a.frequency - b.frequency;
+        return a.{{_Y}} - b.{{_Y}};  // Sort by value for horizontal bars
       });
 
-      // X axis
-      const x = d3.scaleBand()
-        .range([ 0, width ])
+      // Y axis (categories)
+      const y = d3.scaleBand()
+        .range([0, height])
         .domain(data.map(d => d.{{_X}}))
         .padding(0.2);
+      svg.append("g")
+        .call(d3.axisLeft(y))
+        .selectAll("text")
+          .style("font-size", "12px");  // Increased font size
+
+      // Add Y axis label (categories)
+      svg.append("text")
+        .attr("transform", "rotate(-90)")
+        .attr("y", -margin.left + 50)
+        .attr("x", -height/2)
+        .attr("text-anchor", "middle")
+        .style("font-size", "16px")  // Increased font size
+        .text("{{xLabel}}");
+
+      // X axis (values)
+      const x = d3.scaleLinear()
+        .domain([0, d3.max(data, d => d.{{_Y}})])
+        .range([0, width]);
       svg.append("g")
         .attr("transform", `translate(0, ${height})`)
         .call(d3.axisBottom(x))
         .selectAll("text")
-          .attr("transform", "translate(-10,0)rotate(-45)")
-          .style("text-anchor", "end");
+          .style("font-size", "12px");  // Increased font size
 
-      // Add X axis label
+      // Add X axis label (values)
       svg.append("text")
-        .attr("x", width / 2)
+        .attr("x", width/2)
         .attr("y", height + 60)
         .attr("text-anchor", "middle")
-        .style("font-size", "14px")
-        .text("{{xLabel}}");
-
-      // Add Y axis
-      const y = d3.scaleLinear()
-        .domain([0, d3.max(data, d => d.{{_Y}})])
-        .range([ height, 0]);
-      svg.append("g")
-        .call(d3.axisLeft(y))
-        .append("text")
-        .attr("transform", "rotate(-90)")
-        .attr("y", -40)
-        .attr("x", -height / 2)
-        .attr("text-anchor", "middle")
-        .style("font-size", "14px")
+        .style("font-size", "16px")  // Increased font size
         .text("{{yLabel}}");
 
       // Add title
       svg.append("text")
-        .attr("x", width / 2)
+        .attr("x", width/2)
         .attr("y", -30)
         .attr("text-anchor", "middle")
-        .style("font-size", "16px")
+        .style("font-size", "20px")  // Increased font size
         .text("{{figureName}}");
 
       // Bars
@@ -93,16 +173,16 @@
         .data(data)
         .enter()
         .append("rect")
-          .attr("x", d => x(d.{{_X}}))
-          .attr("y", d => y(d.{{_Y}}))
-          .attr("width", x.bandwidth())
-          .attr("height", d => height - y(d.{{_Y}}))
+          .attr("x", 0)  // Start from left
+          .attr("y", d => y(d.{{_X}}))  // Y position based on category
+          .attr("width", d => x(d.{{_Y}}))  // Width represents the value
+          .attr("height", y.bandwidth())  // Height is the band width
           .attr("fill", "#69b3a2")
           .on("mouseover", function(event, d) {
             tooltip.transition()
                 .duration(200)
                 .style("opacity", .9);
-            tooltip.html(`Name: ${d.{{_X}}}<br/>Frequency: ${d.{{_Y}}}`)
+            tooltip.html(`Name: ${d.{{_X}}}<br/>Value: ${d.{{_Y}}}`)
                 .style("left", (event.pageX + 10) + "px")
                 .style("top", (event.pageY - 28) + "px");
             d3.select(this)

@@ -54,7 +54,7 @@ instance Pretty Duration where
         (p, q) = (numerator x, denominator x)
 
 instance Pretty RhythmNT where
-    pretty (RhythmNT a b c) = hsep ["[", pretty a, ":", pretty b, ":", pretty c, "]"]
+    pretty (RhythmNT a b c) ="[" <> pretty a <> ":" <> pretty b <> ":" <> pretty c <> "]"
 
 data TemporalDirection = Early | Late
     deriving (Show, Eq, Ord, Generic)
@@ -92,7 +92,7 @@ instance FromJSON TemporalDirection
 -}
 data RhythmRule
     = Split
-    | SplitDrop
+    | Respell
     | Prepare
     | Shift TemporalDirection
     | Terminate
@@ -111,7 +111,13 @@ instance ToJSONKey RhythmRule
 
 
 instance Pretty RhythmRule where
-    pretty = pretty . show
+    pretty = \case 
+        Split -> "Split"
+        Respell -> "SplitDrop"
+        Prepare -> "Prepare"
+        Shift Early -> "Shift Early"
+        Shift Late -> "Shift Late"
+        Terminate -> "*"
 
 satisfyRule :: RhythmRule -> RhythmNT -> [RhythmNT] -> Bool
 satisfyRule Split x [x1, x2] =
@@ -121,7 +127,7 @@ satisfyRule Split x [x1, x2] =
         , body x1 + body x2 == body x
         , coda x1 + upbeat x2 == 0
         ]
-satisfyRule SplitDrop x [x1] =
+satisfyRule Respell x [x1] =
     or
         [ and
             [ coda x1 == coda x
@@ -180,7 +186,7 @@ inferRule nt = \case
             , Prepare
             , Shift Early
             , Shift Late
-            , SplitDrop
+            , Respell
             ]
 
 -- \case

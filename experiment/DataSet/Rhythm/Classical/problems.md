@@ -12,3 +12,6 @@
 ## annotation remark 
 termination of NT where upbeat > 0 means need to apply an anticipation
    -{[a,b,c] -term-> x} ~> {[a,b,c] -ant-> [0,b,c+a] -term-> x}
+
+
+

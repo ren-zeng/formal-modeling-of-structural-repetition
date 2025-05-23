@@ -38,6 +38,10 @@ dependencies:
 - vector
 - directory
 - mustache
+- process
+- filepath
+- async
+
 ghc-options:
 - -Wall
 - -Wcompat

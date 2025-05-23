@@ -42,13 +42,17 @@ library
       Main
       Preprocessing.JazzHarmony.Main
       Preprocessing.JazzHarmony.TreeBankLoader
+      Preprocessing.Main
       Preprocessing.Preprocess
       Preprocessing.Rhythm.Classical.Main
       Preprocessing.Rhythm.Classical.TreeBankLoader
       Run
       Types
       Util
-      VisualHTML.ScatterPlot
+      VisualHTML.BarPlot.BarPlot
+      VisualHTML.MakeHTML
+      VisualHTML.ScatterPlot.ScatterPlot
+      VisualHTML.SvgToPdf
   other-modules:
       Paths_formal_modeling_of_structural_repetition
   autogen-modules:
@@ -79,16 +83,19 @@ library
   build-depends:
       TreeDiagrams
     , aeson
+    , async
     , base >=4.11 && <10
     , containers
     , diagrams-contrib
     , diagrams-lib
     , diagrams-svg
     , directory
+    , filepath
     , megaparsec
     , musicology-pitch
     , mustache
     , prettyprinter
+    , process
     , recursion-schemes
     , rio >=0.1.12.0
     , safe
@@ -129,18 +136,21 @@ executable formal-modeling-of-structural-repetition-exe
   build-depends:
       TreeDiagrams
     , aeson
+    , async
     , base >=4.11 && <10
     , containers
     , diagrams-contrib
     , diagrams-lib
     , diagrams-svg
     , directory
+    , filepath
     , formal-modeling-of-structural-repetition
     , megaparsec
     , musicology-pitch
     , mustache
     , optparse-simple
     , prettyprinter
+    , process
     , recursion-schemes
     , rio >=0.1.12.0
     , safe
@@ -183,18 +193,21 @@ test-suite formal-modeling-of-structural-repetition-test
   build-depends:
       TreeDiagrams
     , aeson
+    , async
     , base >=4.11 && <10
     , containers
     , diagrams-contrib
     , diagrams-lib
     , diagrams-svg
     , directory
+    , filepath
     , formal-modeling-of-structural-repetition
     , hspec
     , megaparsec
     , musicology-pitch
     , mustache
     , prettyprinter
+    , process
     , recursion-schemes
     , rio >=0.1.12.0
     , safe
