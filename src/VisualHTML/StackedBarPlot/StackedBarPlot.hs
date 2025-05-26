@@ -69,12 +69,12 @@ plotStackedBarPlot = mkHTML "src/VisualHTML/StackedBarPlot/StackedBarPlot.mustac
 -- For example: [{"feature": "Rule1", "frequency": 10, "category": "group1"}, ...]
 exampleMain :: IO ()
 exampleMain = do
-    -- rhythmConfig <- configCategorizedRuleReport
-    --     "Classical Rhythm Rule Distribution (Stacked)"
-    --     "Experiment/DataSet/Rhythm/Classical/RuleDistribution.json"
-    -- plotStackedBarPlot
-    --     rhythmConfig
-    --     "Experiment/DataSet/Rhythm/Classical/StackedRuleDistribution.html"
+    rhythmConfig <- configCategorizedRuleReport
+        "Classical Rhythm Rule Distribution (Stacked)"
+        "Experiment/DataSet/Rhythm/Classical/StackedRuleDistribution.json"
+    plotStackedBarPlot
+        rhythmConfig
+        "Experiment/DataSet/Rhythm/Classical/StackedRuleDistribution.html"
     
     harmonyConfig <- configCategorizedRuleReport 
         "Jazz Harmony Rule Distribution (Stacked)"
@@ -84,3 +84,5 @@ exampleMain = do
         "Experiment/DataSet/Harmony/StackedRuleDistribution.html"
 
 -- >>> exampleMain
+-- Experiment/DataSet/Rhythm/Classical/StackedRuleDistribution.json: openFile: does not exist (No such file or directory)
+

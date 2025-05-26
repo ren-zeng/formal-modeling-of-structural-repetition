@@ -78,8 +78,8 @@ instance FromJSON TemporalDirection
     @
     [a:b:c] -> [a₁:b₁:c₁] [a₂:b:c]
     where
-        a₁ + b₁ = a
-        c₁ + a₂ = 0
+        a₁ + b₁ + c₁ + a₂ = a
+        
     @
 
 - @Shift Early (Anticipation)@
@@ -151,8 +151,7 @@ satisfyRule Prepare x [x1, x2] =
     and
         [ body x2 == body x
         , coda x2 == coda x
-        , coda x1 + upbeat x2 == 0
-        , upbeat x1 + body x1 == upbeat x
+        , upbeat x1 + body x1 + coda x1 + upbeat x2 == upbeat x
         ]
 satisfyRule (Shift Early) x [x1] =
     and
