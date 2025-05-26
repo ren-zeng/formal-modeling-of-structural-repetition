@@ -8,12 +8,13 @@ import Text.Mustache
 import Text.Printf
 import VisualHTML.MakeHTML
 import qualified Text.Mustache.Compile as ScatterPlot
+import Data.Text (Text)
 
 type D3JSCode = String
 
 data ScatterPlotConfig = ScatterPlotConfig
     { figureName :: String
-    , dataSet :: FilePath
+    , dataSet :: Text
     , xLabel :: String
     , yLabel :: String
     , _X :: String -- field name for x coordinate
@@ -33,29 +34,38 @@ instance ToMustache ScatterPlotConfig where
             , "_hoverInfo" ~> _hoverInfo x
             ]
 
-mkScatterConfigCompression :: String -> FilePath -> ScatterPlotConfig
-mkScatterConfigCompression x path =
-    ScatterPlotConfig
+mkScatterConfigCompression :: String -> FilePath -> IO ScatterPlotConfig
+mkScatterConfigCompression x path = do 
+    json <- TIO.readFile path
+    return ScatterPlotConfig
         { figureName = x
-        , dataSet = path
-        , xLabel = "originalSize"
-        , yLabel = "compressedSize"
+        , dataSet = json
+        , xLabel = "original size"
+        , yLabel = "compressed size"
         , _X = "originalSize"
         , _Y = "compressedSize"
         , _hoverInfo = "pieceName"
         }
 
-plotScatterCompression :: String -> FilePath -> FilePath -> IO ()
-plotScatterCompression x path = mkHTML 
+plotScatterCompression :: ScatterPlotConfig -> FilePath  -> IO ()
+plotScatterCompression = mkHTML 
     "src/VisualHTML/ScatterPlot/ScatterPlot.mustache"
-    "compressionScatterPlot" 
-    (mkScatterConfigCompression x path)
+
 
 main = do
-    mapM_
-        (plotScatterCompression 
-        "compressionScatterPlot" 
-        "pieceSizeComparison.json")
-        ["Experiment/Result/Rhythm/Classical", "Experiment/Result/Harmony"]
+    jazzConfig <- mkScatterConfigCompression
+        "Piece-wise compression (Jazz Harmony)"
+        "Experiment/Result/Harmony/pieceSizeComparison.json"
+
+    plotScatterCompression 
+        jazzConfig
+        "Experiment/Result/Harmony/CompressionScatterPlot(Harmony).html"
+    
+    rhythmConfig <- mkScatterConfigCompression
+        "Piece-wise compression (Rhythm)"
+        "Experiment/Result/Rhythm/Classical/pieceSizeComparison.json"
+    plotScatterCompression
+        rhythmConfig
+        "Experiment/Result/Rhythm/Classical/CompressionScatterPlot(Rhythm).html"
 
 -- >>> main

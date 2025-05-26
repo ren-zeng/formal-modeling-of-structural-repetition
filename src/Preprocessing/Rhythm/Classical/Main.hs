@@ -16,7 +16,7 @@ import Control.Applicative (Alternative (empty))
 import Data.Aeson (FromJSON, ToJSON, ToJSONKey, encodeFile)
 import Data.Maybe (mapMaybe)
 import GHC.Generics
-import Grammar.JazzHarmony.JazzGrammar
+
 import Grammar.Rhythm.RhythmGrammar
 import Preprocessing.Preprocess (ParseTreeReport (..), inferRuleTree, plotProofTree, preprocess, titleWithParseTree, withoutCatchAll)
 import Preprocessing.Rhythm.Classical.TreeBankLoader
@@ -82,6 +82,7 @@ main :: IO ()
 main =
     preprocess
         (load $ dataSetFolder <> "/RhythmTreeBank.json")
+        ruleCategory
         getParseTree
         pieceId
         dataSetFolder

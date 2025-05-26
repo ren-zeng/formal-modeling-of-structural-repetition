@@ -5,7 +5,7 @@ module Compression.AttributedSLFP (
     deCompressGAttributed,
     SLTPAttributed (..),
     SLFPAttributed (..),
-    highlightNodeG
+    highlightNodeG,
 ) where
 
 import Compression.Meta
@@ -13,31 +13,36 @@ import Compression.SLFP hiding (arities, compressedTree, globalMetas, globalPatt
 import qualified Compression.SLFP as SLFP
 import Compression.TreeUtils
 import Control.Arrow
+import Data.Bool (bool)
 import Data.List.Split
 import Data.Map (Map)
 import qualified Data.Map as Map
 import Data.Tree
-import Data.Bool (bool)
 
 deCompressTreeAttributed ::
-    (Ord a) =>
+    (Ord a,_) =>
+    b -> -- default value for the attribute
+    (b -> String -> Int -> Abstraction a -> b) ->
     (String -> Pattern (Abstraction a)) ->
     (String -> Meta) ->
     (Abstraction a -> Int) ->
     Tree (b, Abstraction a) ->
     Tree (b, Abstraction a)
-deCompressTreeAttributed dP dM dA t@(Node r ts) = case snd r of
-    (Constant _) -> Node r (deCompressTreeAttributed dP dM dA <$> ts)
+deCompressTreeAttributed b f dP dM dA t@(Node r ts) = case snd r of
+    (Constant _) -> Node r (deCompressTreeAttributed b f dP dM dA <$> ts)
     s@(Var x) ->
         pSubstituteAllAttributed
+            b
             (inferArity dP dM dA y)
-            (dP x)
+            (x, dP x)
+            f
             t
             (findSlots ((== s) . snd) t)
       where
         (Comp _ _ y) = dP x
     s@(x `With` (m, as)) ->
         rSubstituteAllAttributed
+            b
             (s, groupings, meta)
             t
             (findSlots ((== s) . snd) t)
@@ -45,32 +50,53 @@ deCompressTreeAttributed dP dM dA t@(Node r ts) = case snd r of
         groupings = inferArity dP dM dA <$> useMeta meta x as
         meta = dM m
 
-pSubstituteAllAttributed :: Int -> Pattern a -> Tree (b, a) -> [Location] -> Tree (b, a)
-pSubstituteAllAttributed n e = applyPostOrder (pSubstitutionTopAttributed n e)
-
-rSubstituteAllAttributed :: (Abstraction a, [Int], Meta) -> Tree (b, Abstraction a) -> [Location] -> Tree (b, Abstraction a)
-rSubstituteAllAttributed e = applyPostOrder (rSubstitutionTopAttributed e)
-
-pSubstitutionTopAttributed ::
+pSubstituteAllAttributed :: _ =>
+    b -> 
     Int ->
-    Pattern a ->
+    (String, Pattern a) ->
+    (b -> String -> Int -> a -> b) ->
+    Tree (b, a) ->
+    [Location] ->
+    Tree (b, a)
+pSubstituteAllAttributed defB n e f =
+    applyPostOrder (pSubstitutionTopAttributed defB n e f)
+
+rSubstituteAllAttributed ::_ =>
+    b -> 
+    (Abstraction a, [Int], Meta) ->
+    Tree (b, Abstraction a) ->
+    [Location] ->
+    Tree (b, Abstraction a)
+rSubstituteAllAttributed b e = applyPostOrder (rSubstitutionTopAttributed b e)
+
+pSubstitutionTopAttributed ::_ =>
+    b -> 
+    Int ->
+    (String, Pattern a) ->
+    (b -> String -> Int -> a -> b) ->
     Tree (b, a) ->
     Tree (b, a)
-pSubstitutionTopAttributed n (Comp i r y) (Node (b, _) ts) =
-    Node (b, r) $
-        take (i - 1) ts ++ [Node (b, y) (take n . drop (i - 1) $ ts)] ++ drop (i + n - 1) ts
+pSubstitutionTopAttributed defB n (patID, Comp i r y) f (Node (b, _) ts) =
+    Node (updatedAttr, r) $
+        take (i - 1) ts
+            ++ [Node (defB, y) (take n . drop (i - 1) $ ts)]
+            ++ drop (i + n - 1) ts
+  where
+    updatedAttr = f b patID i r -- only the top g's atttribute in @g oi f@ updated (for the task of locating the pattern)
+    
 
-rSubstitutionTopAttributed ::
+rSubstitutionTopAttributed ::_ =>
+    b ->
     (Abstraction a, [Int], Meta) ->
     Tree (b, Abstraction a) ->
     Tree (b, Abstraction a)
-rSubstitutionTopAttributed (rt `With` (_, abs), ns, m) (Node (b, _) ts) =
+rSubstitutionTopAttributed defB (rt `With` (_, abs), ns, m) (Node (b, _) ts) =
     Node (b, rt) ts'
   where
     ts' =
         zipWith
             Node
-            ((b,) <$> useMeta m rt abs)
+            ((defB,) <$> useMeta m rt abs)
             (splitPlacesBlanks ns ts)
 
 data SLTPAttributed b a = SLTPAttributed
@@ -97,20 +123,26 @@ data SLFPAttributed b a k = SLFPAttributed
     deriving (Show, Eq)
 
 -- | only additive, don't unhighlight node
-highlightNode :: (a -> Bool) -> Tree (Bool,a) -> Tree (Bool,a)
-highlightNode f = fmap (\(b,x) -> if f x then (True,x) else (b,x))
+highlightNode :: (a -> Bool) -> Tree (Bool, a) -> Tree (Bool, a)
+highlightNode f = fmap (\(b, x) -> if f x then (True, x) else (b, x))
 
 highlightNodeG ::
     (Abstraction a -> Bool) ->
     SLFPAttributed Bool a k ->
     SLFPAttributed Bool a k
-highlightNodeG f = toGlobal (\sltp -> sltp 
-    {compressedTree = highlightNode f $ compressedTree sltp})
+highlightNodeG f =
+    toGlobal
+        ( \sltp ->
+            sltp
+                { compressedTree = highlightNode f $ compressedTree sltp
+                }
+        )
 
-toGlobal :: (SLTPAttributed b a -> SLTPAttributed b a) 
-    -> SLFPAttributed b a k -> SLFPAttributed b a k
+toGlobal ::
+    (SLTPAttributed b a -> SLTPAttributed b a) ->
+    SLFPAttributed b a k ->
+    SLFPAttributed b a k
 toGlobal f slfp = slfp{sltpsAttributed = f <$> sltpsAttributed slfp}
-
 
 toSLFPAttributed :: (Abstraction a -> b) -> SLFP a k -> SLFPAttributed b a k
 toSLFPAttributed f slfp =
@@ -121,18 +153,25 @@ toSLFPAttributed f slfp =
         , arities = SLFP.arities slfp
         }
 
-deCompressGAttributed :: (_) => SLFPAttributed b a k -> SLFPAttributed b a k
-deCompressGAttributed g@(SLFPAttributed dE dpG drG dA) = SLFPAttributed dE' dpG drG dA
+deCompressGAttributed ::
+    (_) =>
+    b ->
+    (b -> String -> Int -> Abstraction a -> b) ->
+    SLFPAttributed b a k ->
+    SLFPAttributed b a k
+deCompressGAttributed defB f g@(SLFPAttributed dE dpG drG dA) = SLFPAttributed dE' dpG drG dA
   where
-    dE' = deCompressLAttributed dpG drG dA <$> dE
+    dE' = deCompressLAttributed defB f dpG drG dA <$> dE
 
 deCompressLAttributed ::
-    (Ord a) =>
+    (Ord a,_) =>
+    b -> 
+    (b -> String -> Int -> Abstraction a -> b) ->
     Map String (Pattern (Abstraction a)) ->
     Map String Meta ->
     Map (Abstraction a) Int ->
     SLTPAttributed b a ->
     SLTPAttributed b a
-deCompressLAttributed dpG drG dA (SLTPAttributed t dP dM) = SLTPAttributed t' dP dM
+deCompressLAttributed defB f dpG drG dA (SLTPAttributed t dP dM) = SLTPAttributed t' dP dM
   where
-    t' = deCompressTreeAttributed ((dpG <> dP) Map.!) ((drG <> dM) Map.!) (dA Map.!) t
+    t' = deCompressTreeAttributed defB f ((dpG <> dP) Map.!) ((drG <> dM) Map.!) (dA Map.!) t

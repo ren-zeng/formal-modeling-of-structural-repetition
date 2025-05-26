@@ -2,16 +2,51 @@
 <html>
 
 <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>scatter</title>
     <script src="https://d3js.org/d3.v7.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
     <style>
+        * {
+            box-sizing: border-box;
+        }
+
+        body {
+            margin: 0;
+            padding: 0;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            overflow-x: hidden;
+        }
+
+        #scatter-plot {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            position: relative;
+            width: 100%;
+            max-width: 1000px;
+            margin: 0 auto;
+            padding: 10px;
+        }
+
+        svg {
+            width: 100%;
+            height: auto;
+            max-height: 100vh;
+        }
+
         .tooltip {
             position: absolute;
             background-color: white;
-            padding: 5px;
+            padding: 8px;
             border: 1px solid #ddd;
             pointer-events: none;
+            font-size: 14px;
+            box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+            z-index: 100;
+            max-width: 200px;
         }
 
         .button-container {
@@ -20,6 +55,16 @@
             right: 10px;
             display: flex;
             gap: 10px;
+            flex-wrap: wrap;
+            z-index: 10;
+        }
+
+        @media (max-width: 768px) {
+            .button-container {
+                position: static;
+                margin: 10px 0;
+                justify-content: center;
+            }
         }
 
         .save-button {
@@ -30,16 +75,26 @@
             border-radius: 4px;
             cursor: pointer;
             font-size: 14px;
+            touch-action: manipulation;
         }
 
         .save-button:hover {
             background-color: #85c7b5;
         }
+
+        .histogram-bar {
+            fill: #69b3a2;
+            opacity: 0.7;
+        }
+
+        .histogram-bar:hover {
+            fill: #4a7a6e;
+        }
     </style>
 </head>
 
-<body height= 100%, overflow= hidden>
-    <div id="scatter-plot", style="display: flex; flex-direction: row; align-items: center; justify-content: center; position: relative;">
+<body>
+    <div id="scatter-plot">
         <div class="button-container">
             <button class="save-button" onclick="saveSVG()">Save as SVG</button>
             <button class="save-button" onclick="savePDF()">Save as PDF</button>
@@ -70,54 +125,94 @@
 
             // Scale factor for higher resolution (4x)
             const scaleFactor = 4;
+            
+            // Get actual SVG dimensions from viewBox
+            const viewBox = svgElement.getAttribute('viewBox').split(' ');
+            const svgWidth = parseFloat(viewBox[2]);
+            const svgHeight = parseFloat(viewBox[3]);
 
             img.onload = function () {
                 // Set canvas dimensions with scale factor for higher resolution
-                canvas.width = svgElement.width.baseVal.value * scaleFactor;
-                canvas.height = svgElement.height.baseVal.value * scaleFactor;
+                canvas.width = svgWidth * scaleFactor;
+                canvas.height = svgHeight * scaleFactor;
 
-                // Scale the context to match the increased canvas size
+                // Clear canvas and scale the context to match the increased canvas size
+                ctx.clearRect(0, 0, canvas.width, canvas.height);
                 ctx.scale(scaleFactor, scaleFactor);
-                ctx.drawImage(img, 0, 0);
+                ctx.drawImage(img, 0, 0, svgWidth, svgHeight);
 
-                // Create PDF with proper dimensions
+                // Create PDF with proper dimensions that match the SVG's viewBox
                 const imgData = canvas.toDataURL('image/png', 1.0);
                 const { jsPDF } = window.jspdf;
+                
+                // Determine orientation based on aspect ratio
+                const orientation = svgWidth > svgHeight ? 'landscape' : 'portrait';
+                
                 const pdf = new jsPDF({
-                    orientation: canvas.width > canvas.height ? 'landscape' : 'portrait',
-                    unit: 'px',
-                    format: [svgElement.width.baseVal.value, svgElement.height.baseVal.value],
+                    orientation: orientation,
+                    unit: 'pt', // Use points for more precise sizing
+                    format: [svgWidth, svgHeight],
                     hotfixes: ['px_scaling']
                 });
 
-                // Add image at original dimensions but with high-resolution data
-                pdf.addImage(imgData, 'PNG', 0, 0, svgElement.width.baseVal.value, svgElement.height.baseVal.value, '', 'FAST');
+                // Add image at full dimensions
+                pdf.addImage(imgData, 'PNG', 0, 0, svgWidth, svgHeight, '', 'FAST');
                 pdf.save('{{figureName}}.pdf');
             };
 
             img.src = 'data:image/svg+xml;base64,' + btoa(unescape(encodeURIComponent(svgData)));
         }
 
-        // Set the dimensions and margins of the graph
-        const margin = { top: 100, right: 30, bottom: 100, left: 60 };
-        const width = 800 - margin.left - margin.right;
-        const height = 800 - margin.top - margin.bottom;
+        // Set up responsive dimensions
+        function getChartDimensions() {
+            const containerWidth = document.getElementById('scatter-plot').clientWidth;
+            let width, height, margin;
 
-        // Create the SVG container
+            if (containerWidth < 600) {
+                // Mobile dimensions
+                margin = { top: 60, right: 20, bottom: 80, left: 50 };
+                width = containerWidth - margin.left - margin.right;
+                height = Math.min(600, window.innerHeight * 0.7) - margin.top - margin.bottom;
+            } else {
+                // Desktop dimensions
+                margin = { top: 100, right: 30, bottom: 100, left: 60 };
+                width = containerWidth - margin.left - margin.right;
+                height = 800 - margin.top - margin.bottom;
+            }
+
+            return { width, height, margin };
+        }
+
+        // Get dimensions based on screen size
+        const dims = getChartDimensions();
+        const { width, height, margin } = dims;
+        
+        // Calculate histogram dimensions for viewBox adjustments
+        const histogramHeight = height * 0.15;
+        const histogramMargin = 0;
+        
+        // Create the SVG container with adjusted dimensions to fit histograms
         const svg = d3.select("#scatter-plot")
             .append("svg")
-            .attr("width", width + margin.left + margin.right)
-            .attr("height", height + margin.top + margin.bottom)
+            .attr("viewBox", `0 0 ${width + margin.left + margin.right + histogramHeight} ${height + margin.top + margin.bottom + histogramHeight}`)
+            .attr("preserveAspectRatio", "xMidYMid meet")
             .append("g")
-            .attr("transform", `translate(${margin.left},${margin.top})`);
+            .attr("transform", `translate(${margin.left + histogramHeight},${margin.top})`);
 
         // Create tooltip div
         const tooltip = d3.select("body").append("div")
             .attr("class", "tooltip")
             .style("opacity", 0);
 
-        // Load and process the data
-        d3.json("{{dataSet}}").then(function (data) {
+        // Embedded JSON data
+        const data = {{{dataSet}}};
+
+        // Process the data
+        (function () {
+            // Calculate histogram dimensions
+            const histogramHeight = height * 0.15; // 15% of the main plot height
+            const histogramMargin = 0; // Space between main plot and histograms
+            
             // Create scales
             const x = d3.scaleLinear()
                 .domain([0, d3.max(data, d => d.{{_X}})])
@@ -126,60 +221,208 @@
             const y = d3.scaleLinear()
                 .domain([0, d3.max(data, d => d.{{_Y}})])
                 .range([height, 0]);
+                
+            // Generate tick values to ensure consistency between plots and histograms
+            const xTicks = x.ticks(15);
+            const yTicks = y.ticks(15);
+
+            // Adjust font size based on screen width - increasing sizes to match BarPlot
+            const fontSize = width < 500 ? "12px" : "16px";
+            const titleFontSize = width < 500 ? "18px" : "22px";
+            const axisTitleSize = width < 500 ? "14px" : "18px";
+            const histogramLabelSize = width < 500 ? "10px" : "12px";
 
             // Add X axis
             svg.append("g")
                 .attr("transform", `translate(0,${height})`)
-                .call(d3.axisBottom(x))
-                .append("text")
-                .attr("x", width / 2)
-                .attr("y", 40)
-                .attr("fill", "black")
-                .style("font-size", "15")
-                .text("{{xLabel}}");
+                .call(d3.axisBottom(x)
+                    .tickValues(xTicks)
+                    .tickSize(-5) // Negative value for inward ticks
+                )
+                .selectAll("text")
+                .style("font-size", fontSize)
+                .attr("y", 0) // Move text down away from the axis
+                .attr("dy", "-0.71em"); // Standard adjustment for readability
 
+            // Add X axis label
+            svg.append("text")
+                .attr("x", width / 2)
+                .attr("y", height + histogramHeight + (width < 500 ? 50 : 70)) // Adjusted to accommodate histogram
+                .attr("text-anchor", "middle")
+                .attr("fill", "black")
+                .style("font-size", axisTitleSize)
+                .text("{{xLabel}}");
 
             // Add Y axis
             svg.append("g")
-                .call(d3.axisLeft(y))
-                .append("text")
+                .call(d3.axisLeft(y)
+                    .tickValues(yTicks)
+                    .tickSize(-5) // Negative value for inward ticks
+                )
+                .selectAll("text")
+                .style("font-size", fontSize)
+                .attr("x", 10) // Move text left away from the axis
+                .attr("dx", "1em"); // Standard adjustment for readability
+
+            // Add Y axis label
+            svg.append("text")
                 .attr("transform", "rotate(-90)")
-                .attr("y", -40)
+                .attr("y", -(histogramHeight + margin.left) + (width < 500 ? 15 : 25)) // Adjusted to accommodate histogram
                 .attr("x", -height / 2)
+                .attr("text-anchor", "middle")
                 .attr("fill", "black")
-                .style("font-size", "15px")
+                .style("font-size", axisTitleSize)
                 .text("{{yLabel}}");
 
+            // Create X-axis histogram
+            const xHistogram = d3.histogram()
+                .value(d => d.{{_X}})
+                .domain(x.domain())
+                .thresholds(xTicks); // Use the same tick values as the main x-axis
+
+            const xBins = xHistogram(data);
+            
+            // Determine y-scale for X histogram
+            const xHistY = d3.scaleLinear()
+                .domain([0, d3.max(xBins, d => d.length)])
+                .range([0, histogramHeight]); // For downward bars
+                
+            // Create X histogram container
+            const xHistGroup = svg.append("g")
+                .attr("transform", `translate(0, ${height + histogramMargin/2})`);
+            
+            // Draw X histogram bars - now facing downward
+            const xHistBars = xHistGroup.selectAll("rect")
+                .data(xBins)
+                .join("rect")
+                .attr("class", "histogram-bar")
+                .attr("x", d => x(d.x0))
+                .attr("width", d => Math.max(0, x(d.x1) - x(d.x0) - 1))
+                .attr("y", 0) // Start at 0 to go downward
+                .attr("height", d => xHistY(d.length));
+            
+            // Add frequency numbers to bars (for bars with enough width and non-zero frequency)
+            xHistGroup.selectAll("text")
+                .data(xBins)
+                .join("text")
+                .filter(d => d.length > 0 && (x(d.x1) - x(d.x0)) > 15) // Only add text to bars with enough width
+                .attr("x", d => x(d.x0) + (x(d.x1) - x(d.x0)) / 2)
+                .attr("y", d => xHistY(d.length) / 2 + 5) // Position in middle of bar
+                .attr("text-anchor", "middle")
+                .attr("fill", "#333")
+                .style("font-size", histogramLabelSize)
+                .text(d => d.length);
+                
+            // Create Y-axis histogram
+            const yHistogram = d3.histogram()
+                .value(d => d.{{_Y}})
+                .domain(y.domain())
+                .thresholds(yTicks); // Use the same tick values as the main y-axis
+
+            const yBins = yHistogram(data);
+            
+            // Determine x-scale for Y histogram
+            const yHistX = d3.scaleLinear()
+                .domain([0, d3.max(yBins, d => d.length)])
+                .range([0, histogramHeight]); // Scale for leftward bars
+                
+            // Create Y histogram container - position at the left of the y-axis
+            const yHistGroup = svg.append("g")
+                .attr("transform", `translate(${-histogramMargin/2}, 0)`);
+                
+            // Draw Y histogram bars (horizontal) - facing left and aligning with y-axis
+            const yHistBars = yHistGroup.selectAll("rect")
+                .data(yBins)
+                .join("rect")
+                .attr("class", "histogram-bar")
+                .attr("x", d => -yHistX(d.length)) // Start at 0 and extend leftward
+                .attr("width", d => yHistX(d.length))
+                .attr("y", d => y(d.x1)) // Align with the y-axis values
+                .attr("height", d => Math.max(0, y(d.x0) - y(d.x1) - 1));
+                
+            // Add frequency numbers to bars (for bars with enough height and non-zero frequency)
+            yHistGroup.selectAll(".hist-label")
+                .data(yBins)
+                .join("text")
+                .attr("class", "hist-label")
+                .filter(d => d.length > 0 && (y(d.x0) - y(d.x1)) > 15) // Only add text to bars with enough height
+                .attr("x", d => -yHistX(d.length) / 2) // Position in middle of bar
+                .attr("y", d => y(d.x1) + (y(d.x0) - y(d.x1)) / 2 + 5) // Vertically center in bar
+                .attr("text-anchor", "middle")
+                .attr("fill", "#333")
+                .style("font-size", histogramLabelSize)
+                .text(d => d.length);
 
             // Add dots
             svg.selectAll("circle")
                 .data(data)
                 .join("circle")
-                .attr("cx", d => x(d.{{_X}} + Math.random() - 0.5))
-                .attr("cy", d => y(d.{{_Y}} + Math.random() - 0.5))
-                .attr("r", 6)
+                .attr("cx", d => x(d.{{_X}} + Math.random() * 0.5 ))
+                .attr("cy", d => y(d.{{_Y}} + Math.random() * 0.5 ))
+                .attr("r", width < 500 ? 4 : 6)
                 .style("fill", "grey")
                 .style("opacity", 0.7)
                 .on("mouseover", function (event, d) {
                     d3.select(this)
                         .style("fill", "#69b3a2")
-                        .attr("r", 6);
+                        .attr("r", width < 500 ? 5 : 7);
 
                     tooltip.transition()
-                        .duration(0)
+                        .duration(200)
                         .style("opacity", .9);
 
-                    tooltip.html(d.{{_hoverInfo}} + "<br>" + d.{{_X}} + " → " + d.{{_Y}})
-                        .style("left", (event.pageX + 10) + "px")
-                        .style("top", (event.pageY - 28) + "px");
+                    let tooltipContent = d.{{_hoverInfo}} ?
+                        `${d.{{_hoverInfo}}}<br>${d.{{_X}}} → ${d.{{_Y}}}` :
+                        `${d.{{_X}}} → ${d.{{_Y}}}`;
+                    
+                    // Calculate tooltip position relative to the visualization container
+                    const containerRect = document.getElementById('scatter-plot').getBoundingClientRect();
+                    const tooltipX = event.pageX  + 10;
+                    const tooltipY = event.pageY - 28;
+                    
+                    tooltip.html(tooltipContent)
+                        .style("left", tooltipX + "px")
+                        .style("top", tooltipY + "px");
                 })
                 .on("mouseout", function () {
                     d3.select(this)
                         .style("fill", "grey")
-                        .attr("r", 6);
+                        .attr("r", width < 500 ? 4 : 6);
 
                     tooltip.transition()
-                        .duration(0)
+                        .duration(500)
+                        .style("opacity", 0);
+                })
+                .on("touchstart", function (event, d) {
+                    event.preventDefault();
+                    d3.select(this)
+                        .style("fill", "#69b3a2")
+                        .attr("r", width < 500 ? 5 : 7);
+
+                    tooltip.transition()
+                        .duration(200)
+                        .style("opacity", .9);
+
+                    let tooltipContent = d.{{_hoverInfo}} ?
+                        `${d.{{_hoverInfo}}}<br>${d.{{_X}}} → ${d.{{_Y}}}` :
+                        `${d.{{_X}}} → ${d.{{_Y}}}`;
+
+                    // Calculate tooltip position relative to the visualization container for touch events
+                    const containerRect = document.getElementById('scatter-plot').getBoundingClientRect();
+                    const tooltipX = event.touches[0].pageX - containerRect.left + 10;
+                    const tooltipY = event.touches[0].pageY - containerRect.top - 28;
+                    
+                    tooltip.html(tooltipContent)
+                        .style("left", tooltipX + "px")
+                        .style("top", tooltipY + "px");
+                })
+                .on("touchend", function () {
+                    d3.select(this)
+                        .style("fill", "grey")
+                        .attr("r", width < 500 ? 4 : 6);
+
+                    tooltip.transition()
+                        .duration(500)
                         .style("opacity", 0);
                 });
 
@@ -201,8 +444,14 @@
                 .attr("x", width / 2)
                 .attr("y", -30)
                 .attr("text-anchor", "middle")
-                .style("font-size", "20px")
+                .style("font-size", titleFontSize)
                 .text("{{figureName}}");
+        })();
+
+        // Handle window resize
+        window.addEventListener('resize', function () {
+            // For a complete solution, we would redraw the chart
+            // This is simplified to avoid complexity
         });
     </script>
 </body>

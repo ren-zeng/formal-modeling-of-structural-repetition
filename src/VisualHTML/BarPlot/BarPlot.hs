@@ -1,10 +1,13 @@
 module VisualHTML.BarPlot.BarPlot where
+
 import Text.Mustache
 import VisualHTML.MakeHTML (mkHTML)
+import qualified Data.Text.IO as TIO
+import Data.Text (Text)
 
 data BarPlotConfig = BarPlotConfig
     { figureName :: String
-    , dataSet :: FilePath
+    , dataSet :: Text
     , xLabel :: String
     , yLabel :: String
     , _X :: String -- field name for x value
@@ -24,11 +27,12 @@ instance ToMustache BarPlotConfig where
             , "_hoverInfo" ~> _hoverInfo x
             ]
 
-mkBarPlotConfigRuleReport :: String -> FilePath -> BarPlotConfig
-mkBarPlotConfigRuleReport x path =
-    BarPlotConfig
-        { figureName = x
-        , dataSet = path
+configRuleReport :: String -> FilePath -> IO BarPlotConfig
+configRuleReport plotName dataPath = do 
+    json <- TIO.readFile dataPath
+    return $ BarPlotConfig
+        { figureName = plotName
+        , dataSet = json
         , xLabel = "Rule Name"
         , yLabel = "Frequency"
         , _X = "feature"
@@ -36,16 +40,23 @@ mkBarPlotConfigRuleReport x path =
         , _hoverInfo = ""
         }
 
-plotBarPlot x path = mkHTML 
-    "src/VisualHTML/BarPlot/BarPlot.mustache" 
-    "RuleDistribution" 
-    (mkBarPlotConfigRuleReport x path)
+plotBarPlot :: BarPlotConfig -> FilePath -> IO ()
+plotBarPlot = mkHTML "src/VisualHTML/BarPlot/BarPlot.mustache"
 
 main = do
-    mapM_
-        (plotBarPlot 
-        "RuleDistribution" 
-        "RuleDistribution.json")
-        ["Experiment/DataSet/Rhythm/Classical", "Experiment/DataSet/Harmony"]
+    rhythmConfig <- configRuleReport
+        "Classical Rhythm Rule Distribution"
+        "Experiment/DataSet/Rhythm/Classical/RuleDistribution.json"
+    plotBarPlot
+        rhythmConfig
+        "Experiment/DataSet/Rhythm/Classical/RuleDistribution.html"
+    
+    
+    harmonyConfig <- configRuleReport 
+        "Jazz Harmony Rule Distribution"
+        "Experiment/DataSet/Harmony/RuleDistribution.json"
+    plotBarPlot
+        harmonyConfig
+        "Experiment/DataSet/Harmony/RuleDistribution.html"
 
 -- >>> main

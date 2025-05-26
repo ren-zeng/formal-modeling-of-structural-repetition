@@ -1,0 +1,461 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Jazz Harmony Rule Distribution (Stacked)</title>
+    <script src="https://d3js.org/d3.v7.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <style>
+        * {
+            box-sizing: border-box;
+        }
+        body {
+            margin: 0;
+            padding: 0;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            overflow-x: hidden;
+        }
+        #myPlot {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            position: relative;
+            width: 100%;
+            max-width: 1000px;
+            margin: 0 auto;
+            padding: 10px;
+        }
+        svg {
+            width: 100%;
+            height: auto;
+            max-height: 100vh;
+        }
+        .tooltip {
+            position: absolute;
+            background-color: white;
+            padding: 8px;
+            border: 1px solid #ddd;
+            pointer-events: none;
+            font-size: 14px;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+            z-index: 100;
+            max-width: 200px;
+        }
+        .button-container {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+            z-index: 10;
+        }
+        @media (max-width: 768px) {
+            .button-container {
+                position: static;
+                margin: 10px 0;
+                justify-content: center;
+            }
+        }
+        .save-button {
+            padding: 8px 16px;
+            background-color: #69b3a2;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+            touch-action: manipulation;
+        }
+        .save-button:hover {
+            background-color: #85c7b5;
+        }
+        .feature-bar {
+            transition: opacity 0.2s, stroke-width 0.2s;
+        }
+        .feature-bar.highlighted {
+            stroke-width: 2px;
+            stroke: #000;
+        }
+        .category-legend-item, .feature-legend-item {
+            cursor: pointer;
+        }
+        .legend-rect.highlighted {
+            
+            stroke-width: 1px;
+            stroke: #000;
+        }
+    </style>
+</head>
+
+<body>
+    <div id="myPlot">
+        <div class="button-container">
+            <button class="save-button" onclick="saveSVG()">Save as SVG</button>
+            <button class="save-button" onclick="savePDF()">Save as PDF</button>
+        </div>
+    </div>
+    <script>
+    // Set margins and dimensions
+    const margin = {top: 50, right: 150, bottom: 50, left: 150};
+    const width = 800 - margin.left - margin.right;
+    const height = 300 - margin.top - margin.bottom;
+
+    // Create SVG element
+    const svg = d3.select("#myPlot")
+        .append("svg")
+        .attr("width", width + margin.left + margin.right)
+        .attr("height", height + margin.top + margin.bottom)
+        .append("g")
+        .attr("transform", `translate(${margin.left}, ${margin.top})`);
+
+    // Create tooltip
+    const tooltip = d3.select("body")
+        .append("div")
+        .attr("class", "tooltip")
+        .style("opacity", 0);
+
+    // Process the data
+    const rawData = [{"feature":{"category":"Terminating","content":"*"},"frequency":4049},{"feature":{"category":"Dominantic","content":"Backdoor-I"},"frequency":55},{"feature":{"category":"Plagal","content":"IV(Oct)-I"},"frequency":17},{"feature":{"category":"Dominantic","content":"TritoneSub-I"},"frequency":189},{"feature":{"category":"Dominantic","content":"V(Oct)-I"},"frequency":123},{"feature":{"category":"Dominantic","content":"V-I"},"frequency":1029},{"feature":{"category":"Plagal","content":"Ⅳ-I"},"frequency":60},{"feature":{"category":"Predominantic","content":"Ⅳ-V"},"frequency":108},{"feature":{"category":"Predominantic","content":"Ⅵ-V"},"frequency":46},{"feature":{"category":"Predominantic","content":"↘5th"},"frequency":829},{"feature":{"category":"Prolongational","content":"〖Hexatonic〗"},"frequency":7},{"feature":{"category":"Prolongational","content":"〖Octatonic〗"},"frequency":112},{"feature":{"category":"Prolongational","content":"〖ParallelMotion〗"},"frequency":1},{"feature":{"category":"Prolongational","content":"〖RelativeTonic〗"},"frequency":47},{"feature":{"category":"Prolongational","content":"〖Repeat〗"},"frequency":1276}];
+
+    // Transform the data for stacking
+    const transformedData = rawData.map(item => ({
+        feature: item.feature.content,
+        category: item.feature.category,
+        frequency: item.frequency,
+        category: item.feature.category // Category for stacking
+    }));
+    
+    // Process by category first
+    const categoryGroups = d3.group(transformedData, d => d.category);
+    
+    // Create category data with totals
+    const categoryData = Array.from(categoryGroups, ([category, values]) => {
+        // Sum frequencies for this category
+        const total = d3.sum(values, d => d.frequency);
+        
+        // Get features for this category
+        const features = Array.from(d3.group(values, d => d.feature), ([feature, featureValues]) => ({
+            feature: feature,
+            frequency: d3.sum(featureValues, d => d.frequency),
+            category: category
+        }));
+        
+        // Sort features by frequency
+        features.sort((a, b) => b.frequency - a.frequency);
+        
+        return {
+            category: category,
+            total: total,
+            features: features
+        };
+    });
+    
+    // Sort categories by total frequency
+    categoryData.sort((a, b) => b.total - a.total);
+    
+    // Get unique categories and stack keys
+    const categories = categoryData.map(d => d.category);
+    
+    // Create Y scale (categories)
+    const y = d3.scaleBand()
+        .range([0, height])
+        .domain(categories)
+        .padding(0.2);
+    
+    // Create a nested Y scale for features within each category
+    const yFeature = {};
+    categoryData.forEach(cat => {
+        const features = cat.features.map(f => f.feature);
+        yFeature[cat.category] = d3.scaleBand()
+            .domain(features)
+            .range([0, y.bandwidth()])
+            .padding(0.05);
+    });
+    
+    // Draw Y axis (categories)
+    svg.append("g")
+        .call(d3.axisLeft(y));
+
+    // Add Y axis label
+    svg.append("text")
+        .attr("transform", "rotate(-90)")
+        .attr("y", -margin.left + 40)
+        .attr("x", -height/2)
+        .attr("text-anchor", "middle")
+        .text("Rule Name");
+
+    // Create X scale (values)
+    const x = d3.scaleLinear()
+        .domain([0, d3.max(categoryData, d => d.total)])
+        .range([0, width]);
+    
+    // Draw X axis
+    svg.append("g")
+        .attr("transform", `translate(0, ${height})`)
+        .call(d3.axisBottom(x));
+
+    // Add X axis label
+    svg.append("text")
+        .attr("x", width/2)
+        .attr("y", height + 40)
+        .attr("text-anchor", "middle")
+        .text("Frequency");
+
+    // Add chart title
+    svg.append("text")
+        .attr("x", width/2)
+        .attr("y", -20)
+        .attr("text-anchor", "middle")
+        .style("font-size", "16px")
+        .text("Jazz Harmony Rule Distribution (Stacked)");
+
+    // Color scale for categories
+    const colorCategory = d3.scaleOrdinal()
+        .domain(categories)
+        .range(d3.schemeCategory10);
+        
+    // Color scale for features (with a different palette)
+    const colorFeature = d3.scaleOrdinal()
+        .domain(transformedData.map(d => d.feature))
+        .range(d3.schemeSet3);
+
+    // Draw category bars (background)
+    const categoryBars = svg.selectAll(".category-group")
+        .data(categoryData)
+        .join("g")
+        .attr("class", "category-group")
+        .attr("transform", d => `translate(0, ${y(d.category)})`);
+        
+    // Add border rectangle for each category to visually group feature bars
+    categoryBars.append("rect")
+        .attr("class", "category-border")
+        .attr("x", 0)
+        .attr("y", 0)
+        .attr("width", d => x(d.total))
+        .attr("height", y.bandwidth())
+        .attr("fill", "none")
+        .attr("stroke", "#333")
+        .attr("stroke-width", 0);
+    
+    // Draw feature bars (within each category)
+    categoryBars.each(function(cat) {
+        const catGroup = d3.select(this);
+        
+        // Track starting position for each feature bar
+        let xPosition = 0;
+        
+        // Add bars for each feature in this category
+        cat.features.forEach(feature => {
+            // Calculate the width of this feature bar
+            const barWidth = x(feature.frequency);
+            
+            // Only add feature bars with sufficient width
+            const featureBar = catGroup.append("rect")
+                .attr("class", `feature-bar feature-${feature.feature.replace(/\s+/g, '-')}`)
+                .attr("data-category", cat.category)
+                .attr("data-feature", feature.feature)
+                .attr("x", xPosition)
+                .attr("y", 0) // Start from top of category bar area
+                .attr("width", barWidth)
+                .attr("height", y.bandwidth()) // Use full category bar height
+                .attr("fill", colorFeature(feature.feature))
+                .attr("stroke", "#333")
+                .attr("stroke-width", 0.5)
+                .on("mouseover", function(event) {
+                    tooltip.transition()
+                        .duration(200)
+                        .style("opacity", 0.9);
+                    tooltip.html(`Category: ${cat.category}<br>Feature: ${feature.feature}<br>Frequency: ${feature.frequency}`)
+                        .style("left", (event.pageX + 10) + "px")
+                        .style("top", (event.pageY - 28) + "px");
+                })
+                .on("mouseout", function() {
+                    tooltip.transition()
+                        .duration(500)
+                        .style("opacity", 0);
+                });
+            
+            // Add label to the bar segment if there's enough space
+            if (barWidth > 40) { // Only add text if the bar is wide enough
+                catGroup.append("text")
+                    .attr("class", "feature-label")
+                    .attr("x", xPosition + barWidth/2)
+                    .attr("y", y.bandwidth()/2)
+                    .attr("dy", ".35em")
+                    .attr("text-anchor", "middle")
+                    .attr("fill", "#000")
+                    .style("font-size", "10px")
+                    .style("pointer-events", "none")
+                    .text(feature.feature);
+            }
+            
+            // Update x position for features to be stacked horizontally
+            xPosition += barWidth;
+        });
+    });
+    
+    // Add legend for categories
+    const categoryLegend = svg.append("g")
+        .attr("font-size", "12px")
+        .attr("text-anchor", "start")
+        .selectAll(".category-legend")
+        .data(categories)
+        .enter().append("g")
+        .attr("class", "category-legend-item")
+        .attr("data-category", d => d)
+        .attr("transform", (d, i) => `translate(${width + 20}, ${i * 20})`)
+        .on("mouseenter", function(event, category) {
+            // Highlight the legend item
+            d3.select(this).select("rect")
+                .classed("highlighted", true);
+            d3.select(this).select("text")
+                .classed("highlighted", true);
+                
+            // Highlight all bars for this category
+            d3.selectAll(`.feature-bar[data-category="${category}"]`)
+                .classed("highlighted", true);
+                
+            // Fade other categories
+            d3.selectAll(`.feature-bar:not([data-category="${category}"])`)
+                .style("opacity", 0.3);
+        })
+        .on("mouseleave", function(event, category) {
+            // Reset legend highlighting
+            d3.select(this).select("rect")
+                .classed("highlighted", false);
+            d3.select(this).select("text")
+                .classed("highlighted", false);
+                
+            // Reset bar highlighting
+            d3.selectAll(".feature-bar")
+                .classed("highlighted", false)
+                .style("opacity", 1);
+        });
+
+    categoryLegend.append("rect")
+        .attr("class", "legend-rect")
+        .attr("width", 15)
+        .attr("height", 15)
+        .attr("fill", d => colorCategory(d));
+
+    categoryLegend.append("text")
+        .attr("class", "legend-text")
+        .attr("x", 20)
+        .attr("y", 10)
+        .text(d => d);
+        
+    // Extract all unique features for the legend instead of just top N
+    const allFeatures = Array.from(
+        new Set(
+            categoryData.flatMap(cat => 
+                cat.features
+                .map(f => f.feature)
+            )
+        )
+    );
+    
+    // Add legend for features
+    const featureLegend = svg.append("g")
+        .attr("font-size", "12px")
+        .attr("text-anchor", "start")
+        .selectAll(".feature-legend")
+        .data(allFeatures)
+        .enter().append("g")
+        .attr("class", "feature-legend-item")
+        .attr("data-feature", d => d)
+        .attr("transform", (d, i) => `translate(${width + 20}, ${(categories.length + 2 + i) * 20})`)
+        .on("mouseenter", function(event, feature) {
+            // Highlight the legend item
+            d3.select(this).select("rect")
+                .classed("highlighted", true);
+            d3.select(this).select("text")
+                .classed("highlighted", true);
+                
+            // Highlight all bars with this feature
+            d3.selectAll(`.feature-bar[data-feature="${feature}"]`)
+                .classed("highlighted", true);
+                
+            // Fade other features
+            d3.selectAll(`.feature-bar:not([data-feature="${feature}"])`)
+                .style("opacity", 0.3);
+        })
+        .on("mouseleave", function(event, feature) {
+            // Reset legend highlighting
+            d3.select(this).select("rect")
+                .classed("highlighted", false);
+            d3.select(this).select("text")
+                .classed("highlighted", false);
+                
+            // Reset bar highlighting
+            d3.selectAll(".feature-bar")
+                .classed("highlighted", false)
+                .style("opacity", 1);
+        });
+
+    featureLegend.append("rect")
+        .attr("class", "legend-rect")
+        .attr("width", 15)
+        .attr("height", 15)
+        .attr("fill", d => colorFeature(d));
+
+    featureLegend.append("text")
+        .attr("class", "legend-text")
+        .attr("x", 20)
+        .attr("y", 10)
+        .text(d => d);
+        
+    // Functions to save the visualization
+    function saveSVG() {
+        const svgData = new XMLSerializer().serializeToString(document.querySelector("svg"));
+        const svgBlob = new Blob([svgData], {type: "image/svg+xml;charset=utf-8"});
+        const svgUrl = URL.createObjectURL(svgBlob);
+        const downloadLink = document.createElement("a");
+        downloadLink.href = svgUrl;
+        downloadLink.download = "Jazz Harmony Rule Distribution (Stacked).svg";
+        document.body.appendChild(downloadLink);
+        downloadLink.click();
+        document.body.removeChild(downloadLink);
+    }
+    
+    function savePDF() {
+        const svgElement = document.querySelector('svg');
+        const svgData = new XMLSerializer().serializeToString(svgElement);
+        const canvas = document.createElement('canvas');
+        const ctx = canvas.getContext('2d');
+        const img = new Image();
+        
+        // Scale factor for higher resolution (4x)
+        const scaleFactor = 4;
+        
+        img.onload = function() {
+            // Set canvas dimensions with scale factor for higher resolution
+            canvas.width = svgElement.width.baseVal.value * scaleFactor;
+            canvas.height = svgElement.height.baseVal.value * scaleFactor;
+            
+            // Scale the context to match the increased canvas size
+            ctx.scale(scaleFactor, scaleFactor);
+            ctx.drawImage(img, 0, 0);
+            
+            // Create PDF with proper dimensions
+            const imgData = canvas.toDataURL('image/png', 1.0);
+            const { jsPDF } = window.jspdf;
+            const pdf = new jsPDF({
+                orientation: canvas.width > canvas.height ? 'landscape' : 'portrait',
+                unit: 'px',
+                format: [svgElement.width.baseVal.value, svgElement.height.baseVal.value],
+                hotfixes: ['px_scaling']
+            });
+            
+            // Add image at original dimensions but with high-resolution data
+            pdf.addImage(imgData, 'PNG', 0, 0, svgElement.width.baseVal.value, svgElement.height.baseVal.value, '', 'FAST');
+            pdf.save('Jazz Harmony Rule Distribution (Stacked).pdf');
+        };
+        
+        img.src = 'data:image/svg+xml;base64,' + btoa(unescape(encodeURIComponent(svgData)));
+    }
+    </script>
+</body>
+</html>

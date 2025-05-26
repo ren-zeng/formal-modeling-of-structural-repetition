@@ -41,6 +41,8 @@ dependencies:
 - process
 - filepath
 - async
+- bytestring
+
 
 ghc-options:
 - -Wall

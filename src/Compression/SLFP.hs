@@ -63,6 +63,8 @@ data Abstraction a
 
 instance (FromJSON a) =>  FromJSON (Abstraction a)
 instance (ToJSON a) =>  ToJSON (Abstraction a)
+instance (ToJSON a) => ToJSONKey (Abstraction a) 
+instance (FromJSON a) => FromJSONKey (Abstraction a) 
 
 
 instance Pretty a => Pretty (Abstraction a) where
@@ -217,7 +219,10 @@ data SLTP a = SLTP
   , patterns :: Map.Map String (Pattern (Abstraction a))
   , metas :: Map.Map String Meta
   }
-  deriving (Show, Eq)
+  deriving (Show, Eq,Generic)
+
+instance (ToJSON a, ToJSONKey a) => ToJSON (SLTP a)
+instance (FromJSON a, FromJSONKey a) => FromJSON (SLTP a)
 
 initSLTP :: Tree a -> SLTP a
 initSLTP t = SLTP (Constant <$> t) Map.empty Map.empty
@@ -331,7 +336,11 @@ data SLFP a b = SLFP
   , globalMetas :: Map.Map String Meta
   , arities :: Map.Map (Abstraction a) Int
   }
-  deriving (Show, Eq)
+  deriving (Show, Eq,Generic)
+
+instance (ToJSON a,ToJSONKey a, ToJSON b,ToJSONKey b,ToJSONKey (Abstraction a)) => ToJSON (SLFP a b)
+instance (Ord a, Ord b,FromJSON a,FromJSONKey b,FromJSONKey a) => FromJSON (SLFP a b)
+
 
 initSLFP :: (_) => [(b, Tree a)] -> SLFP a b
 initSLFP nts =

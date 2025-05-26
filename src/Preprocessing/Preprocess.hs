@@ -5,6 +5,7 @@ module Preprocessing.Preprocess where
 import Core.ParseTree
 import Core.SymbolTree
 
+import Control.Concurrent.Async (mapConcurrently_)
 import Data.Aeson
 import Data.Functor.Foldable
 import Data.Map (Map)
@@ -20,9 +21,9 @@ import qualified Preprocessing.JazzHarmony.TreeBankLoader as JHTB
 import Prettyprinter
 import System.Directory
 import Text.Printf
+import VisualHTML.SvgToPdf
 import Visualization.ParseTree
 import Visualization.Text
-import VisualHTML.SvgToPdf
 
 rootSymbol :: SymbolTree nt t -> Symbol nt t
 rootSymbol (TLeaf x) = T x
@@ -72,14 +73,17 @@ plotProofTree outFolder name t =
     renderSVG
         (printf "%s/%s.svg" outFolder $ show $ pretty name)
         (mkWidth 1000)
-        (Diagrams.bg white $ drawParseTree 
-        (frame 0.25 . drawText . show . pretty) 
-        (drawSymbol (drawText . show . pretty) (drawText . show . pretty)) t)
+        ( Diagrams.bg white $
+            drawParseTree
+                (frame 0.25 . drawText . show . pretty)
+                (drawSymbol (drawText . show . pretty) (drawText . show . pretty))
+                t
+        )
 
 drawSymbol :: (nt -> Diagram B) -> (t -> Diagram B) -> Symbol nt t -> Diagram B
 drawSymbol drawNT drawT = \case
     T x -> drawT x # opacity 0.2
-    NT x -> drawNT x 
+    NT x -> drawNT x
 
 data ParseTreeReport = ParseTreeReport
     { allRuleInfered :: Int
@@ -87,8 +91,8 @@ data ParseTreeReport = ParseTreeReport
     }
     deriving (Generic, Show)
 
-instance ToJSON (ParseTreeReport)
-instance FromJSON (ParseTreeReport)
+instance ToJSON ParseTreeReport
+instance FromJSON ParseTreeReport
 
 toMaybe :: Result a -> Maybe a
 toMaybe (Success x) = Just x
@@ -106,16 +110,24 @@ getAllRules = cata $ \case
 histogram :: (Ord a) => [a] -> Map a Int
 histogram = foldr (\x acc -> Map.insertWith (+) x 1 acc) Map.empty
 
-toCounts :: (Ord a,Pretty a) => Map a Int -> [Count String]
-toCounts =  fmap  (fmap (show . pretty) . uncurry Count)  . Map.toList
-
 data Count a = Count {feature :: a, frequency :: Int}
-    deriving (Generic, Show,Functor)
+    deriving (Generic, Show, Functor)
 instance (ToJSON a) => ToJSON (Count a)
 instance (FromJSON a) => FromJSON (Count a)
 
-preprocess :: (_) => IO [a] -> (a -> ParseTree (Maybe r) nt t) -> (a -> k) -> FilePath -> IO ()
-preprocess load getParseTree getPieceName outDir = do
+toCounts :: Map a Int -> [Count a]
+toCounts = fmap (uncurry Count) . Map.toList
+
+data Categorized a b = Categorized
+    { content :: a
+    , category :: b
+    }
+    deriving (Generic, Show, Functor, Eq, Ord)
+instance (ToJSON a, ToJSON b) => ToJSON (Categorized a b)
+instance (FromJSON a, FromJSON b) => FromJSON (Categorized a b)
+
+preprocess :: (_) => IO [a] -> (r -> r') -> (a -> ParseTree (Maybe r) nt t) -> (a -> k) -> FilePath -> IO ()
+preprocess load ruleCategory getParseTree getPieceName outDir = do
     ps <- load
     let xs = fmap (titleWithParseTree getParseTree getPieceName) ps
     encodeFile (outDir <> "/ParseTrees.json") xs
@@ -126,30 +138,34 @@ preprocess load getParseTree getPieceName outDir = do
                 length $
                     filter (not . withoutCatchAll . snd) xs
             }
+
     encodeFile (outDir <> "/RuleDistribution.json") $
-        toCounts . histogram $
+        toCounts . Map.mapKeys (show . pretty) . histogram $
             foldMap (getAllRules . snd) xs
+
+    encodeFile (outDir <> "/RuleDistributionCategory.json")
+        $ toCounts
+            . Map.mapKeys
+                (fmap $ \x -> Categorized (show $ pretty x) (ruleCategory x))
+            . histogram
+        $ foldMap (getAllRules . snd) xs
 
     let parseTreeDir = outDir <> "/InferedParseTrees"
     let svgFolder = parseTreeDir <> "/svg"
     let pdfFolder = parseTreeDir <> "/pdf"
 
     emptyDirectory parseTreeDir
- 
+    createDirectory svgFolder
+    mapConcurrently_ (uncurry $ plotProofTree (outDir <> "/InferedParseTrees/svg")) xs
 
-    createDirectory  svgFolder
-    mapM_ (uncurry $ plotProofTree (outDir <> "/InferedParseTrees/svg")) xs
-
-    createDirectory  pdfFolder
+    createDirectory pdfFolder
     svgFiles <- listDirectory svgFolder
-    mapM_ (\x -> convertSvgToPdf (svgFolder <> "/"<>x) pdfFolder)  svgFiles
-    
+    convertSvgsToPdf ((\x -> svgFolder <> "/" <> x) <$> svgFiles) pdfFolder
 
 instance (ToJSONKey a, ToJSON a) => ToJSONKey (Maybe a)
 
-
 emptyDirectory :: FilePath -> IO ()
-emptyDirectory path = do 
-    createDirectoryIfMissing False path 
-    removeDirectoryRecursive path 
+emptyDirectory path = do
+    createDirectoryIfMissing False path
+    removeDirectoryRecursive path
     createDirectory path

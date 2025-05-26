@@ -19,6 +19,7 @@ import Data.Aeson
 import GHC.Generics (Generic)
 import Prettyprinter
 
+
 data Pitch = SomePitch deriving (Show, Eq, Ord, Generic)
 
 instance ToJSON Pitch
@@ -199,3 +200,15 @@ inferRule nt = \case
 --             return $ ParseTree nt r ts'
 --         Nothing -> error $ show $ "inferRuleTree encounters a NTNode whose children are not all NT" <+> viaShow (rootNT <$> ts)
 -- TLeaf x -> error "impossible case in inferRuleTree"
+data RuleCategory = Splitting | Preparing | Respelling | Shifting | Terminating
+    deriving (Show, Eq, Ord, Generic)
+instance ToJSON RuleCategory
+instance FromJSON RuleCategory
+
+ruleCategory :: RhythmRule -> RuleCategory
+ruleCategory = \case
+    Split -> Splitting
+    Respell -> Respelling
+    Prepare -> Preparing
+    Shift _ -> Shifting
+    Terminate -> Terminating

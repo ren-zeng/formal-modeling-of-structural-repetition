@@ -52,6 +52,7 @@ library
       VisualHTML.BarPlot.BarPlot
       VisualHTML.MakeHTML
       VisualHTML.ScatterPlot.ScatterPlot
+      VisualHTML.StackedBarPlot.StackedBarPlot
       VisualHTML.SvgToPdf
   other-modules:
       Paths_formal_modeling_of_structural_repetition
@@ -85,6 +86,7 @@ library
     , aeson
     , async
     , base >=4.11 && <10
+    , bytestring
     , containers
     , diagrams-contrib
     , diagrams-lib
@@ -138,6 +140,7 @@ executable formal-modeling-of-structural-repetition-exe
     , aeson
     , async
     , base >=4.11 && <10
+    , bytestring
     , containers
     , diagrams-contrib
     , diagrams-lib
@@ -195,6 +198,7 @@ test-suite formal-modeling-of-structural-repetition-test
     , aeson
     , async
     , base >=4.11 && <10
+    , bytestring
     , containers
     , diagrams-contrib
     , diagrams-lib

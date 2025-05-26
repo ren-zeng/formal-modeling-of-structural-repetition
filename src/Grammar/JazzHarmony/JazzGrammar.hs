@@ -72,25 +72,39 @@ data RuleNames = Prol ProlKind | Prep PrepKind | Term
   deriving (Show, Eq, Generic, Ord)
 
 instance ToJSON RuleNames
-
 instance FromJSON RuleNames
+
+
 instance ToJSONKey RuleNames
+instance FromJSONKey RuleNames
 
 instance Pretty RuleNames where
   pretty (Prol k) = "〖" <> pretty k <> "〗"
   pretty (Prep k) = pretty k
   pretty Term = "*"
 
-data AbstractRule = AbstractRule RuleNames deriving (Eq, Generic)
+data RuleCategory = Prolongational | Dominantic | Predominantic | Plagal | Terminating
+  deriving (Show, Eq, Generic, Ord)
+instance ToJSON RuleCategory
+instance FromJSON RuleCategory
 
-instance ToJSON AbstractRule
+ruleCategory :: RuleNames -> RuleCategory
+ruleCategory = \case 
+  Prol _ -> Prolongational 
+  Prep x -> case x of 
+    V_I -> Dominantic
+    TritoneSub_I -> Dominantic
+    Backdoor_I -> Dominantic
+    VOct_I -> Dominantic 
+    
+    IV_V -> Predominantic
+    VI_V -> Predominantic
+    Descending5th -> Predominantic 
 
-instance FromJSON AbstractRule
+    IV_I -> Plagal
+    IVOct_I -> Plagal
+  Term -> Terminating
 
-instance Show AbstractRule where
-  show (AbstractRule (Prol _)) = "Prol"
-  show (AbstractRule (Prep _)) = "Prep"
-  show (AbstractRule Term) = "Term"
 
 (=~) :: ChordLabel -> ChordLabel -> Bool
 (ChordLabel r q _) =~ (ChordLabel r' q' _) = (r, q) == (r', q')

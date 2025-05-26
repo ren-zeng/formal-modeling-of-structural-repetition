@@ -82,6 +82,7 @@ reportCompression resultDir slfp = do
         ruleStats = ruleSummary final
         pieceSizeComparison = (\(k, (ori, fin)) -> SizeChange (show $ pretty k) ori fin) <$> Map.toList (individualPieceChange slfp final)
 
+    encodeFile (resultDir <> "/finalSLFP.json") final
     encodeFile (resultDir <> "/globalMetas.json") ms
     encodeFile (resultDir <> "/ruleStats.json") ruleStats
     encodeFile (resultDir <> "/pieceSizeComparison.json") pieceSizeComparison
@@ -89,12 +90,15 @@ reportCompression resultDir slfp = do
         (resultDir <> "sizeCurve.json")
         (uncurry SizeCurve <$> zip [1 ..] (size <$> steps))
 
+    encodeFile (resultDir <> "/patternDepth.json") $ patternDepthInCorpus final
+
+    encodeFile (resultDir <> "/patternLocs.json") $  markPatternIdInCorpus final
 
     -- encodeFile (resultDir <> "/patternHighlightedInCorpus.json") $
     --     report highlightPatternInCorpus final
 
     let patternInfo = report mkPatternInfo final
-            
+    
     encodeFile (resultDir <> "/patternInfo.json") patternInfo
 
 type PatternID = String

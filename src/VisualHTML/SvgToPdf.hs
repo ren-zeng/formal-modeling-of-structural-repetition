@@ -1,30 +1,31 @@
-module VisualHTML.SvgToPdf where
+module VisualHTML.SvgToPdf (
+    convertSvgsToPdf,
+    convertSvgToPdf
+) where
 
 import System.Process (callProcess)
 import System.Directory 
 import System.FilePath (replaceExtension, takeFileName)
-import Control.Monad (when, unless)
-import Control.Concurrent.Async (mapConcurrently)
+import Control.Monad (unless)
+import Control.Concurrent.Async (mapConcurrently_)
 import Control.Exception (try, SomeException)
 
 -- | Convert multiple SVG files to PDF concurrently
--- Returns a list of generated PDF file paths
-convertSvgsToPdf :: [FilePath] -> FilePath -> IO [FilePath]
+convertSvgsToPdf :: [FilePath] -> FilePath -> IO ()
 convertSvgsToPdf svgPaths outDir = do
     -- Create output directory if it doesn't exist
     createDirectoryIfMissing True outDir
-    -- Convert files concurrently and collect results
-    mapConcurrently (convertSvgToPdfSafe outDir) svgPaths
+    -- Convert files concurrently, discarding results since we only care about the effects
+    mapConcurrently_ (convertSvgToPdfSafe outDir) svgPaths
 
 -- | Safe version of convertSvgToPdf that handles errors
-convertSvgToPdfSafe :: FilePath -> FilePath -> IO FilePath
+convertSvgToPdfSafe :: FilePath -> FilePath -> IO ()
 convertSvgToPdfSafe outDir svgPath = do
     result <- try $ convertSvgToPdf svgPath outDir
     case result of
-        Left e -> do
+        Left e -> 
             putStrLn $ "Error converting " ++ svgPath ++ ": " ++ show (e :: SomeException)
-            return ""
-        Right path -> return path
+        Right _ -> return ()
 
 -- | Convert a single SVG file to PDF using rsvg-convert
 -- Returns the path to the generated PDF file

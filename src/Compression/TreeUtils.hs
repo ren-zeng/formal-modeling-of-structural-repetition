@@ -40,3 +40,7 @@ leafLocations (Node _ ts) = concat [(i <:) <$> leafLocations t | (i, t) <- zip [
 
 indexToLocation :: Int -> Tree a -> Location
 indexToLocation n t = leafLocations t !! n
+
+
+sizeTree :: Tree a -> Int 
+sizeTree = foldTree $ \_ bs -> 1 + sum bs

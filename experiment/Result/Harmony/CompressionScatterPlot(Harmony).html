@@ -1,0 +1,459 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>scatter</title>
+    <script src="https://d3js.org/d3.v7.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <style>
+        * {
+            box-sizing: border-box;
+        }
+
+        body {
+            margin: 0;
+            padding: 0;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            overflow-x: hidden;
+        }
+
+        #scatter-plot {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            position: relative;
+            width: 100%;
+            max-width: 1000px;
+            margin: 0 auto;
+            padding: 10px;
+        }
+
+        svg {
+            width: 100%;
+            height: auto;
+            max-height: 100vh;
+        }
+
+        .tooltip {
+            position: absolute;
+            background-color: white;
+            padding: 8px;
+            border: 1px solid #ddd;
+            pointer-events: none;
+            font-size: 14px;
+            box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+            z-index: 100;
+            max-width: 200px;
+        }
+
+        .button-container {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+            z-index: 10;
+        }
+
+        @media (max-width: 768px) {
+            .button-container {
+                position: static;
+                margin: 10px 0;
+                justify-content: center;
+            }
+        }
+
+        .save-button {
+            padding: 8px 16px;
+            background-color: #69b3a2;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+            touch-action: manipulation;
+        }
+
+        .save-button:hover {
+            background-color: #85c7b5;
+        }
+
+        .histogram-bar {
+            fill: #69b3a2;
+            opacity: 0.7;
+        }
+
+        .histogram-bar:hover {
+            fill: #4a7a6e;
+        }
+    </style>
+</head>
+
+<body>
+    <div id="scatter-plot">
+        <div class="button-container">
+            <button class="save-button" onclick="saveSVG()">Save as SVG</button>
+            <button class="save-button" onclick="savePDF()">Save as PDF</button>
+        </div>
+    </div>
+    <script>
+        // Function to save as SVG
+        function saveSVG() {
+            const svgData = document.querySelector('svg').outerHTML;
+            const blob = new Blob([svgData], { type: 'image/svg+xml' });
+            const url = URL.createObjectURL(blob);
+            const link = document.createElement('a');
+            link.href = url;
+            link.download = 'Piece-wise compression (Jazz Harmony).svg';
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            URL.revokeObjectURL(url);
+        }
+
+        // Function to save as PDF
+        function savePDF() {
+            const svgElement = document.querySelector('svg');
+            const svgData = new XMLSerializer().serializeToString(svgElement);
+            const canvas = document.createElement('canvas');
+            const ctx = canvas.getContext('2d');
+            const img = new Image();
+
+            // Scale factor for higher resolution (4x)
+            const scaleFactor = 4;
+            
+            // Get actual SVG dimensions from viewBox
+            const viewBox = svgElement.getAttribute('viewBox').split(' ');
+            const svgWidth = parseFloat(viewBox[2]);
+            const svgHeight = parseFloat(viewBox[3]);
+
+            img.onload = function () {
+                // Set canvas dimensions with scale factor for higher resolution
+                canvas.width = svgWidth * scaleFactor;
+                canvas.height = svgHeight * scaleFactor;
+
+                // Clear canvas and scale the context to match the increased canvas size
+                ctx.clearRect(0, 0, canvas.width, canvas.height);
+                ctx.scale(scaleFactor, scaleFactor);
+                ctx.drawImage(img, 0, 0, svgWidth, svgHeight);
+
+                // Create PDF with proper dimensions that match the SVG's viewBox
+                const imgData = canvas.toDataURL('image/png', 1.0);
+                const { jsPDF } = window.jspdf;
+                
+                // Determine orientation based on aspect ratio
+                const orientation = svgWidth > svgHeight ? 'landscape' : 'portrait';
+                
+                const pdf = new jsPDF({
+                    orientation: orientation,
+                    unit: 'pt', // Use points for more precise sizing
+                    format: [svgWidth, svgHeight],
+                    hotfixes: ['px_scaling']
+                });
+
+                // Add image at full dimensions
+                pdf.addImage(imgData, 'PNG', 0, 0, svgWidth, svgHeight, '', 'FAST');
+                pdf.save('Piece-wise compression (Jazz Harmony).pdf');
+            };
+
+            img.src = 'data:image/svg+xml;base64,' + btoa(unescape(encodeURIComponent(svgData)));
+        }
+
+        // Set up responsive dimensions
+        function getChartDimensions() {
+            const containerWidth = document.getElementById('scatter-plot').clientWidth;
+            let width, height, margin;
+
+            if (containerWidth < 600) {
+                // Mobile dimensions
+                margin = { top: 60, right: 20, bottom: 80, left: 50 };
+                width = containerWidth - margin.left - margin.right;
+                height = Math.min(600, window.innerHeight * 0.7) - margin.top - margin.bottom;
+            } else {
+                // Desktop dimensions
+                margin = { top: 100, right: 30, bottom: 100, left: 60 };
+                width = containerWidth - margin.left - margin.right;
+                height = 800 - margin.top - margin.bottom;
+            }
+
+            return { width, height, margin };
+        }
+
+        // Get dimensions based on screen size
+        const dims = getChartDimensions();
+        const { width, height, margin } = dims;
+        
+        // Calculate histogram dimensions for viewBox adjustments
+        const histogramHeight = height * 0.15;
+        const histogramMargin = 0;
+        
+        // Create the SVG container with adjusted dimensions to fit histograms
+        const svg = d3.select("#scatter-plot")
+            .append("svg")
+            .attr("viewBox", `0 0 ${width + margin.left + margin.right + histogramHeight} ${height + margin.top + margin.bottom + histogramHeight}`)
+            .attr("preserveAspectRatio", "xMidYMid meet")
+            .append("g")
+            .attr("transform", `translate(${margin.left + histogramHeight},${margin.top})`);
+
+        // Create tooltip div
+        const tooltip = d3.select("body").append("div")
+            .attr("class", "tooltip")
+            .style("opacity", 0);
+
+        // Embedded JSON data
+        const data = [{"compressedSize":20,"originalSize":69,"pieceName":"(Valid)502 Blues"},{"compressedSize":27,"originalSize":73,"pieceName":"(Valid)Across The Valley From The Alamo"},{"compressedSize":18,"originalSize":39,"pieceName":"(Valid)Afro Blue"},{"compressedSize":17,"originalSize":61,"pieceName":"(Valid)All Of Me"},{"compressedSize":19,"originalSize":43,"pieceName":"(Valid)Armando's Rhumba"},{"compressedSize":9,"originalSize":67,"pieceName":"(Valid)Autumn Leaves"},{"compressedSize":19,"originalSize":63,"pieceName":"(Valid)Avalon"},{"compressedSize":15,"originalSize":57,"pieceName":"(Valid)Backstage Sally"},{"compressedSize":21,"originalSize":49,"pieceName":"(Valid)Ballade"},{"compressedSize":23,"originalSize":71,"pieceName":"(Valid)Baubles, Bangles And Beads"},{"compressedSize":13,"originalSize":33,"pieceName":"(Valid)Beatrice"},{"compressedSize":28,"originalSize":67,"pieceName":"(Valid)Beautiful Friendship, A"},{"compressedSize":26,"originalSize":71,"pieceName":"(Valid)Beautiful Love"},{"compressedSize":27,"originalSize":57,"pieceName":"(Valid)Bemsha Swing"},{"compressedSize":29,"originalSize":73,"pieceName":"(Valid)Best Things In Life Are Free, The"},{"compressedSize":21,"originalSize":65,"pieceName":"(Valid)Bill Bailey"},{"compressedSize":13,"originalSize":31,"pieceName":"(Valid)Birk's Works"},{"compressedSize":17,"originalSize":29,"pieceName":"(Valid)Blue Bossa"},{"compressedSize":15,"originalSize":31,"pieceName":"(Valid)Blue In Green"},{"compressedSize":37,"originalSize":69,"pieceName":"(Valid)Blue Lou"},{"compressedSize":10,"originalSize":41,"pieceName":"(Valid)Blues For Alice"},{"compressedSize":8,"originalSize":25,"pieceName":"(Valid)Blues For Wood"},{"compressedSize":10,"originalSize":49,"pieceName":"(Valid)Bluesette"},{"compressedSize":22,"originalSize":53,"pieceName":"(Valid)Boo Boo's Birthday"},{"compressedSize":11,"originalSize":27,"pieceName":"(Valid)Booker's Waltz"},{"compressedSize":26,"originalSize":65,"pieceName":"(Valid)Bossa Antigua"},{"compressedSize":29,"originalSize":67,"pieceName":"(Valid)Boy Next Door"},{"compressedSize":21,"originalSize":65,"pieceName":"(Valid)Bright Mississippi"},{"compressedSize":11,"originalSize":69,"pieceName":"(Valid)Broadway"},{"compressedSize":13,"originalSize":37,"pieceName":"(Valid)Brotherhood Of Man"},{"compressedSize":20,"originalSize":71,"pieceName":"(Valid)Candy"},{"compressedSize":8,"originalSize":43,"pieceName":"(Valid)Central Park West"},{"compressedSize":9,"originalSize":57,"pieceName":"(Valid)Chucho"},{"compressedSize":7,"originalSize":33,"pieceName":"(Valid)Contemplation"},{"compressedSize":22,"originalSize":67,"pieceName":"(Valid)Cool One, The"},{"compressedSize":32,"originalSize":75,"pieceName":"(Valid)Corcovado"},{"compressedSize":44,"originalSize":67,"pieceName":"(Valid)Dancing In The Dark"},{"compressedSize":14,"originalSize":65,"pieceName":"(Valid)Dearly Beloved"},{"compressedSize":28,"originalSize":69,"pieceName":"(Valid)Don't Worry 'Bout Me"},{"compressedSize":16,"originalSize":67,"pieceName":"(Valid)Donna Lee"},{"compressedSize":1,"originalSize":23,"pieceName":"(Valid)Equinox"},{"compressedSize":25,"originalSize":69,"pieceName":"(Valid)Exactly Like You"},{"compressedSize":14,"originalSize":67,"pieceName":"(Valid)Fine And Dandy"},{"compressedSize":29,"originalSize":67,"pieceName":"(Valid)Fine Romance, A"},{"compressedSize":26,"originalSize":61,"pieceName":"(Valid)Fools Rush In"},{"compressedSize":8,"originalSize":47,"pieceName":"(Valid)Footprints"},{"compressedSize":15,"originalSize":43,"pieceName":"(Valid)Four On Six"},{"compressedSize":6,"originalSize":41,"pieceName":"(Valid)Freight Train"},{"compressedSize":13,"originalSize":33,"pieceName":"(Valid)Friday The 13th"},{"compressedSize":13,"originalSize":37,"pieceName":"(Valid)Funkallero"},{"compressedSize":23,"originalSize":61,"pieceName":"(Valid)Gary's Notebook"},{"compressedSize":30,"originalSize":55,"pieceName":"(Valid)Girl Talk"},{"compressedSize":20,"originalSize":63,"pieceName":"(Valid)Glad To Be Unhappy"},{"compressedSize":8,"originalSize":65,"pieceName":"(Valid)Good Life, The"},{"compressedSize":16,"originalSize":37,"pieceName":"(Valid)Got A Match?"},{"compressedSize":23,"originalSize":69,"pieceName":"(Valid)Hackensack"},{"compressedSize":6,"originalSize":33,"pieceName":"(Valid)Half Nelson"},{"compressedSize":1,"originalSize":63,"pieceName":"(Valid)Hot House"},{"compressedSize":3,"originalSize":73,"pieceName":"(Valid)How High The Moon"},{"compressedSize":35,"originalSize":63,"pieceName":"(Valid)Hungaria"},{"compressedSize":17,"originalSize":67,"pieceName":"(Valid)I Can't Believe...You're In Love..."},{"compressedSize":26,"originalSize":61,"pieceName":"(Valid)I Fall In Love Too Easily"},{"compressedSize":22,"originalSize":65,"pieceName":"(Valid)I Love Paris"},{"compressedSize":21,"originalSize":69,"pieceName":"(Valid)I Love You"},{"compressedSize":34,"originalSize":61,"pieceName":"(Valid)I Wish I Knew How It Would Feel To Be Free"},{"compressedSize":9,"originalSize":71,"pieceName":"(Valid)I'll Close My Eyes"},{"compressedSize":15,"originalSize":73,"pieceName":"(Valid)I've Found A New Baby"},{"compressedSize":17,"originalSize":61,"pieceName":"(Valid)I've Found A New Baby v2"},{"compressedSize":19,"originalSize":61,"pieceName":"(Valid)I've Got A Crush On You"},{"compressedSize":20,"originalSize":59,"pieceName":"(Valid)Idle Moments"},{"compressedSize":16,"originalSize":51,"pieceName":"(Valid)If You Ever Should Leave"},{"compressedSize":12,"originalSize":29,"pieceName":"(Valid)If You Never Come To Me"},{"compressedSize":25,"originalSize":65,"pieceName":"(Valid)In A Little Spanish Town"},{"compressedSize":22,"originalSize":61,"pieceName":"(Valid)In A Mellow Tone (In A Mellotone)"},{"compressedSize":19,"originalSize":65,"pieceName":"(Valid)In A Shanty In Old Shanty Town"},{"compressedSize":8,"originalSize":23,"pieceName":"(Valid)Interplay"},{"compressedSize":11,"originalSize":21,"pieceName":"(Valid)Israel"},{"compressedSize":18,"originalSize":53,"pieceName":"(Valid)It's Been A Long Long Time"},{"compressedSize":10,"originalSize":35,"pieceName":"(Valid)Jackie-ing"},{"compressedSize":30,"originalSize":65,"pieceName":"(Valid)Jeannie's Song"},{"compressedSize":25,"originalSize":71,"pieceName":"(Valid)Jersey Bounce"},{"compressedSize":7,"originalSize":23,"pieceName":"(Valid)Jody Grind, The"},{"compressedSize":16,"originalSize":41,"pieceName":"(Valid)Just A Gigolo"},{"compressedSize":27,"originalSize":67,"pieceName":"(Valid)Just Friends"},{"compressedSize":35,"originalSize":67,"pieceName":"(Valid)Just In Time"},{"compressedSize":5,"originalSize":29,"pieceName":"(Valid)Lady Bird"},{"compressedSize":24,"originalSize":37,"pieceName":"(Valid)Leaving"},{"compressedSize":25,"originalSize":63,"pieceName":"(Valid)Lennie's Pennies"},{"compressedSize":26,"originalSize":49,"pieceName":"(Valid)Light Blue"},{"compressedSize":10,"originalSize":45,"pieceName":"(Valid)Little Boat (O Barquinho)"},{"compressedSize":29,"originalSize":67,"pieceName":"(Valid)Look For The Silver Lining"},{"compressedSize":12,"originalSize":33,"pieceName":"(Valid)Mac The Knife"},{"compressedSize":40,"originalSize":65,"pieceName":"(Valid)Minor Mood"},{"compressedSize":9,"originalSize":27,"pieceName":"(Valid)Minor Strain"},{"compressedSize":31,"originalSize":63,"pieceName":"(Valid)Move"},{"compressedSize":1,"originalSize":23,"pieceName":"(Valid)Mr. P.C."},{"compressedSize":29,"originalSize":57,"pieceName":"(Valid)My Ideal"},{"compressedSize":20,"originalSize":63,"pieceName":"(Valid)My Melancholy Baby"},{"compressedSize":18,"originalSize":45,"pieceName":"(Valid)Night Dreamer"},{"compressedSize":32,"originalSize":65,"pieceName":"(Valid)Nothing Personal"},{"compressedSize":30,"originalSize":69,"pieceName":"(Valid)Nuages"},{"compressedSize":16,"originalSize":63,"pieceName":"(Valid)O Grande Amor"},{"compressedSize":19,"originalSize":39,"pieceName":"(Valid)Old Country, The"},{"compressedSize":7,"originalSize":31,"pieceName":"(Valid)On The Trail"},{"compressedSize":15,"originalSize":49,"pieceName":"(Valid)Paper Doll"},{"compressedSize":11,"originalSize":35,"pieceName":"(Valid)Peace"},{"compressedSize":7,"originalSize":31,"pieceName":"(Valid)Pent Up House"},{"compressedSize":21,"originalSize":41,"pieceName":"(Valid)Recordame"},{"compressedSize":12,"originalSize":25,"pieceName":"(Valid)Red Clay"},{"compressedSize":25,"originalSize":65,"pieceName":"(Valid)Remember"},{"compressedSize":12,"originalSize":63,"pieceName":"(Valid)Rose Room"},{"compressedSize":9,"originalSize":51,"pieceName":"(Valid)Serenade To A Cuckoo"},{"compressedSize":16,"originalSize":43,"pieceName":"(Valid)Serenity"},{"compressedSize":27,"originalSize":67,"pieceName":"(Valid)Shadow Of Your Smile, The"},{"compressedSize":16,"originalSize":63,"pieceName":"(Valid)Shine"},{"compressedSize":24,"originalSize":45,"pieceName":"(Valid)Simone"},{"compressedSize":27,"originalSize":67,"pieceName":"(Valid)Smile"},{"compressedSize":7,"originalSize":61,"pieceName":"(Valid)So Danco Samba"},{"compressedSize":17,"originalSize":65,"pieceName":"(Valid)So Nice (Summer Samba)"},{"compressedSize":7,"originalSize":29,"pieceName":"(Valid)Solar"},{"compressedSize":24,"originalSize":65,"pieceName":"(Valid)Someday My Prince Will Come"},{"compressedSize":19,"originalSize":49,"pieceName":"(Valid)Song For My Father"},{"compressedSize":3,"originalSize":47,"pieceName":"(Valid)St. Thomas"},{"compressedSize":21,"originalSize":69,"pieceName":"(Valid)Stella By Starlight"},{"compressedSize":25,"originalSize":63,"pieceName":"(Valid)Struttin' With Some Barbecue"},{"compressedSize":1,"originalSize":63,"pieceName":"(Valid)Subconscious Lee"},{"compressedSize":15,"originalSize":31,"pieceName":"(Valid)Sugar"},{"compressedSize":13,"originalSize":41,"pieceName":"(Valid)Summertime"},{"compressedSize":16,"originalSize":33,"pieceName":"(Valid)Sunny"},{"compressedSize":16,"originalSize":31,"pieceName":"(Valid)Sweet Georgia Bright"},{"compressedSize":20,"originalSize":67,"pieceName":"(Valid)Take The A Train"},{"compressedSize":32,"originalSize":67,"pieceName":"(Valid)Them There Eyes"},{"compressedSize":18,"originalSize":71,"pieceName":"(Valid)This Can't Be Love"},{"compressedSize":29,"originalSize":63,"pieceName":"(Valid)Time On My Hands"},{"compressedSize":26,"originalSize":63,"pieceName":"(Valid)Tune Up"},{"compressedSize":10,"originalSize":35,"pieceName":"(Valid)United"},{"compressedSize":14,"originalSize":29,"pieceName":"(Valid)Valse Hot"},{"compressedSize":3,"originalSize":31,"pieceName":"(Valid)Wayne's Thang"},{"compressedSize":7,"originalSize":33,"pieceName":"(Valid)We Will Meet Again"},{"compressedSize":15,"originalSize":63,"pieceName":"(Valid)Weaver Of Dreams, A"},{"compressedSize":5,"originalSize":63,"pieceName":"(Valid)What Is This Thing Called Love"},{"compressedSize":10,"originalSize":31,"pieceName":"(Valid)When The Saints Go Marching In"},{"compressedSize":13,"originalSize":63,"pieceName":"(Valid)When You're Smilin'"},{"compressedSize":18,"originalSize":65,"pieceName":"(Valid)Why Do I Love You?"},{"compressedSize":20,"originalSize":39,"pieceName":"(Valid)Why Don't You Do Right?"},{"compressedSize":15,"originalSize":51,"pieceName":"(Valid)Witch Hunt"},{"compressedSize":12,"originalSize":33,"pieceName":"(Valid)Work Song"},{"compressedSize":12,"originalSize":39,"pieceName":"(Valid)Yesterdays"},{"compressedSize":19,"originalSize":65,"pieceName":"(Valid)You Stepped Out Of A Dream"},{"compressedSize":33,"originalSize":67,"pieceName":"(Valid)Zingaro (Retrato Em Branco E Preto)"}];
+
+        // Process the data
+        (function () {
+            // Calculate histogram dimensions
+            const histogramHeight = height * 0.15; // 15% of the main plot height
+            const histogramMargin = 0; // Space between main plot and histograms
+            
+            // Create scales
+            const x = d3.scaleLinear()
+                .domain([0, d3.max(data, d => d.originalSize)])
+                .range([0, width]);
+
+            const y = d3.scaleLinear()
+                .domain([0, d3.max(data, d => d.compressedSize)])
+                .range([height, 0]);
+                
+            // Generate tick values to ensure consistency between plots and histograms
+            const xTicks = x.ticks(15);
+            const yTicks = y.ticks(15);
+
+            // Adjust font size based on screen width - increasing sizes to match BarPlot
+            const fontSize = width < 500 ? "12px" : "16px";
+            const titleFontSize = width < 500 ? "18px" : "22px";
+            const axisTitleSize = width < 500 ? "14px" : "18px";
+            const histogramLabelSize = width < 500 ? "10px" : "12px";
+
+            // Add X axis
+            svg.append("g")
+                .attr("transform", `translate(0,${height})`)
+                .call(d3.axisBottom(x)
+                    .tickValues(xTicks)
+                    .tickSize(-5) // Negative value for inward ticks
+                )
+                .selectAll("text")
+                .style("font-size", fontSize)
+                .attr("y", 0) // Move text down away from the axis
+                .attr("dy", "-0.71em"); // Standard adjustment for readability
+
+            // Add X axis label
+            svg.append("text")
+                .attr("x", width / 2)
+                .attr("y", height + histogramHeight + (width < 500 ? 50 : 70)) // Adjusted to accommodate histogram
+                .attr("text-anchor", "middle")
+                .attr("fill", "black")
+                .style("font-size", axisTitleSize)
+                .text("original size");
+
+            // Add Y axis
+            svg.append("g")
+                .call(d3.axisLeft(y)
+                    .tickValues(yTicks)
+                    .tickSize(-5) // Negative value for inward ticks
+                )
+                .selectAll("text")
+                .style("font-size", fontSize)
+                .attr("x", 10) // Move text left away from the axis
+                .attr("dx", "1em"); // Standard adjustment for readability
+
+            // Add Y axis label
+            svg.append("text")
+                .attr("transform", "rotate(-90)")
+                .attr("y", -(histogramHeight + margin.left) + (width < 500 ? 15 : 25)) // Adjusted to accommodate histogram
+                .attr("x", -height / 2)
+                .attr("text-anchor", "middle")
+                .attr("fill", "black")
+                .style("font-size", axisTitleSize)
+                .text("compressed size");
+
+            // Create X-axis histogram
+            const xHistogram = d3.histogram()
+                .value(d => d.originalSize)
+                .domain(x.domain())
+                .thresholds(xTicks); // Use the same tick values as the main x-axis
+
+            const xBins = xHistogram(data);
+            
+            // Determine y-scale for X histogram
+            const xHistY = d3.scaleLinear()
+                .domain([0, d3.max(xBins, d => d.length)])
+                .range([0, histogramHeight]); // For downward bars
+                
+            // Create X histogram container
+            const xHistGroup = svg.append("g")
+                .attr("transform", `translate(0, ${height + histogramMargin/2})`);
+            
+            // Draw X histogram bars - now facing downward
+            const xHistBars = xHistGroup.selectAll("rect")
+                .data(xBins)
+                .join("rect")
+                .attr("class", "histogram-bar")
+                .attr("x", d => x(d.x0))
+                .attr("width", d => Math.max(0, x(d.x1) - x(d.x0) - 1))
+                .attr("y", 0) // Start at 0 to go downward
+                .attr("height", d => xHistY(d.length));
+            
+            // Add frequency numbers to bars (for bars with enough width and non-zero frequency)
+            xHistGroup.selectAll("text")
+                .data(xBins)
+                .join("text")
+                .filter(d => d.length > 0 && (x(d.x1) - x(d.x0)) > 15) // Only add text to bars with enough width
+                .attr("x", d => x(d.x0) + (x(d.x1) - x(d.x0)) / 2)
+                .attr("y", d => xHistY(d.length) / 2 + 5) // Position in middle of bar
+                .attr("text-anchor", "middle")
+                .attr("fill", "#333")
+                .style("font-size", histogramLabelSize)
+                .text(d => d.length);
+                
+            // Create Y-axis histogram
+            const yHistogram = d3.histogram()
+                .value(d => d.compressedSize)
+                .domain(y.domain())
+                .thresholds(yTicks); // Use the same tick values as the main y-axis
+
+            const yBins = yHistogram(data);
+            
+            // Determine x-scale for Y histogram
+            const yHistX = d3.scaleLinear()
+                .domain([0, d3.max(yBins, d => d.length)])
+                .range([0, histogramHeight]); // Scale for leftward bars
+                
+            // Create Y histogram container - position at the left of the y-axis
+            const yHistGroup = svg.append("g")
+                .attr("transform", `translate(${-histogramMargin/2}, 0)`);
+                
+            // Draw Y histogram bars (horizontal) - facing left and aligning with y-axis
+            const yHistBars = yHistGroup.selectAll("rect")
+                .data(yBins)
+                .join("rect")
+                .attr("class", "histogram-bar")
+                .attr("x", d => -yHistX(d.length)) // Start at 0 and extend leftward
+                .attr("width", d => yHistX(d.length))
+                .attr("y", d => y(d.x1)) // Align with the y-axis values
+                .attr("height", d => Math.max(0, y(d.x0) - y(d.x1) - 1));
+                
+            // Add frequency numbers to bars (for bars with enough height and non-zero frequency)
+            yHistGroup.selectAll(".hist-label")
+                .data(yBins)
+                .join("text")
+                .attr("class", "hist-label")
+                .filter(d => d.length > 0 && (y(d.x0) - y(d.x1)) > 15) // Only add text to bars with enough height
+                .attr("x", d => -yHistX(d.length) / 2) // Position in middle of bar
+                .attr("y", d => y(d.x1) + (y(d.x0) - y(d.x1)) / 2 + 5) // Vertically center in bar
+                .attr("text-anchor", "middle")
+                .attr("fill", "#333")
+                .style("font-size", histogramLabelSize)
+                .text(d => d.length);
+
+            // Add dots
+            svg.selectAll("circle")
+                .data(data)
+                .join("circle")
+                .attr("cx", d => x(d.originalSize + Math.random() * 0.5 ))
+                .attr("cy", d => y(d.compressedSize + Math.random() * 0.5 ))
+                .attr("r", width < 500 ? 4 : 6)
+                .style("fill", "grey")
+                .style("opacity", 0.7)
+                .on("mouseover", function (event, d) {
+                    d3.select(this)
+                        .style("fill", "#69b3a2")
+                        .attr("r", width < 500 ? 5 : 7);
+
+                    tooltip.transition()
+                        .duration(200)
+                        .style("opacity", .9);
+
+                    let tooltipContent = d.pieceName ?
+                        `${d.pieceName}<br>${d.originalSize} → ${d.compressedSize}` :
+                        `${d.originalSize} → ${d.compressedSize}`;
+                    
+                    // Calculate tooltip position relative to the visualization container
+                    const containerRect = document.getElementById('scatter-plot').getBoundingClientRect();
+                    const tooltipX = event.pageX  + 10;
+                    const tooltipY = event.pageY - 28;
+                    
+                    tooltip.html(tooltipContent)
+                        .style("left", tooltipX + "px")
+                        .style("top", tooltipY + "px");
+                })
+                .on("mouseout", function () {
+                    d3.select(this)
+                        .style("fill", "grey")
+                        .attr("r", width < 500 ? 4 : 6);
+
+                    tooltip.transition()
+                        .duration(500)
+                        .style("opacity", 0);
+                })
+                .on("touchstart", function (event, d) {
+                    event.preventDefault();
+                    d3.select(this)
+                        .style("fill", "#69b3a2")
+                        .attr("r", width < 500 ? 5 : 7);
+
+                    tooltip.transition()
+                        .duration(200)
+                        .style("opacity", .9);
+
+                    let tooltipContent = d.pieceName ?
+                        `${d.pieceName}<br>${d.originalSize} → ${d.compressedSize}` :
+                        `${d.originalSize} → ${d.compressedSize}`;
+
+                    // Calculate tooltip position relative to the visualization container for touch events
+                    const containerRect = document.getElementById('scatter-plot').getBoundingClientRect();
+                    const tooltipX = event.touches[0].pageX - containerRect.left + 10;
+                    const tooltipY = event.touches[0].pageY - containerRect.top - 28;
+                    
+                    tooltip.html(tooltipContent)
+                        .style("left", tooltipX + "px")
+                        .style("top", tooltipY + "px");
+                })
+                .on("touchend", function () {
+                    d3.select(this)
+                        .style("fill", "grey")
+                        .attr("r", width < 500 ? 4 : 6);
+
+                    tooltip.transition()
+                        .duration(500)
+                        .style("opacity", 0);
+                });
+
+            const xExtent = d3.max(data, d => d.originalSize)
+            const yExtent = d3.max(data, d => d.compressedSize)
+            const minExtent = Math.min(xExtent, yExtent)
+            const oneToOne = [{ x: 0, y: 0 }, { x: minExtent, y: minExtent }];
+            const line = d3.line()
+                .x(d => x(d.x))
+                .y(d => y(d.y));
+            svg.append("path")
+                .attr("fill", "none")
+                .attr("stroke", "black")
+                .attr("stroke-width", 1)
+                .attr("d", line(oneToOne));
+
+            // Add title
+            svg.append("text")
+                .attr("x", width / 2)
+                .attr("y", -30)
+                .attr("text-anchor", "middle")
+                .style("font-size", titleFontSize)
+                .text("Piece-wise compression (Jazz Harmony)");
+        })();
+
+        // Handle window resize
+        window.addEventListener('resize', function () {
+            // For a complete solution, we would redraw the chart
+            // This is simplified to avoid complexity
+        });
+    </script>
+</body>
+
+</html>
