@@ -1,0 +1,373 @@
+{
+    "id": "SchubertN10M07:15",
+    "tree": {
+        "label": "[1/8:18/4:0]",
+        "children": [
+            {
+                "label": "[1/8:2:0]",
+                "children": [
+                    {
+                        "label": "[1/8:1:-1/8]",
+                        "children": [
+                            {
+                                "label": "[1/8:2/4:-1/8]",
+                                "children": [
+                                    {
+                                        "label": "[1/8:1/4:-1/16]",
+                                        "children": [
+                                            {
+                                                "label": "G4:1/8",
+                                                "children": []
+                                            },
+                                            {
+                                                "label": "[0:1/4:-1/16]",
+                                                "children": [
+                                                    {
+                                                        "label": "G4:3/16",
+                                                        "children": []
+                                                    }
+                                                ]
+                                            }
+                                        ]
+                                    },
+                                    {
+                                        "label": "[1/16:1/4:-1/8]",
+                                        "children": [
+                                            {
+                                                "label": "Ab4:1/16",
+                                                "children": []
+                                            },
+                                            {
+                                                "label": "[0:1/4:-1/8]",
+                                                "children": [
+                                                    {
+                                                        "label": "G4:1/8",
+                                                        "children": []
+                                                    }
+                                                ]
+                                            }
+                                        ]
+                                    }
+                                ]
+                            },
+                            {
+                                "label": "[1/8:2/4:-1/8]",
+                                "children": [
+                                    {
+                                        "label": "[1/8:1/4:-1/16]",
+                                        "children": [
+                                            {
+                                                "label": "G4:1/8",
+                                                "children": []
+                                            },
+                                            {
+                                                "label": "[0:1/4:-1/16]",
+                                                "children": [
+                                                    {
+                                                        "label": "Bb4:3/16",
+                                                        "children": []
+                                                    }
+                                                ]
+                                            }
+                                        ]
+                                    },
+                                    {
+                                        "label": "[1/16:1/4:-1/8]",
+                                        "children": [
+                                            {
+                                                "label": "Ab4:1/16",
+                                                "children": []
+                                            },
+                                            {
+                                                "label": "[0:1/4:-1/8]",
+                                                "children": [
+                                                    {
+                                                        "label": "Ab4:1/8",
+                                                        "children": []
+                                                    }
+                                                ]
+                                            }
+                                        ]
+                                    }
+                                ]
+                            }
+                        ]
+                    },
+                    {
+                        "label": "[1/8:1:0]",
+                        "children": [
+                            {
+                                "label": "[1/8:2/4:-1/8]",
+                                "children": [
+                                    {
+                                        "label": "[1/8:1/4:-1/16]",
+                                        "children": [
+                                            {
+                                                "label": "Ab4:1/8",
+                                                "children": []
+                                            },
+                                            {
+                                                "label": "[0:1/4:-1/16]",
+                                                "children": [
+                                                    {
+                                                        "label": "B4:3/16",
+                                                        "children": []
+                                                    }
+                                                ]
+                                            }
+                                        ]
+                                    },
+                                    {
+                                        "label": "[1/16:1/4:-1/8]",
+                                        "children": [
+                                            {
+                                                "label": "B4:1/16",
+                                                "children": []
+                                            },
+                                            {
+                                                "label": "[0:1/4:-1/8]",
+                                                "children": [
+                                                    {
+                                                        "label": "D5:1/8",
+                                                        "children": []
+                                                    }
+                                                ]
+                                            }
+                                        ]
+                                    }
+                                ]
+                            },
+                            {
+                                "label": "[1/8:2/4:0]",
+                                "children": [
+                                    {
+                                        "label": "[0:1/8:0]",
+                                        "children": [
+                                            {
+                                                "label": "C5:1/16",
+                                                "children": []
+                                            },
+                                            {
+                                                "label": "B4:1/16",
+                                                "children": []
+                                            }
+                                        ]
+                                    },
+                                    {
+                                        "label": "[0:2/4:0]",
+                                        "children": [
+                                            {
+                                                "label": "C5:1/4",
+                                                "children": []
+                                            },
+                                            {
+                                                "label": "[0:1/4:0]",
+                                                "children": [
+                                                    {
+                                                        "label": "C4:1/8",
+                                                        "children": []
+                                                    },
+                                                    {
+                                                        "label": "r:1/8",
+                                                        "children": []
+                                                    }
+                                                ]
+                                            }
+                                        ]
+                                    }
+                                ]
+                            }
+                        ]
+                    }
+                ]
+            },
+            {
+                "label": "[2/4:2:0]",
+                "children": [
+                    {
+                        "label": "[2/4:1:-1/8]",
+                        "children": [
+                            {
+                                "label": "[0:2/4:-1/8]",
+                                "children": [
+                                    {
+                                        "label": "r:3/8",
+                                        "children": []
+                                    }
+                                ]
+                            },
+                            {
+                                "label": "[1/8:1:-1/8]",
+                                "children": [
+                                    {
+                                        "label": "[1/8:2/4:-1/8]",
+                                        "children": [
+                                            {
+                                                "label": "[1/8:1/4:-1/16]",
+                                                "children": [
+                                                    {
+                                                        "label": "C5:1/8",
+                                                        "children": []
+                                                    },
+                                                    {
+                                                        "label": "[0:1/4:-1/16]",
+                                                        "children": [
+                                                            {
+                                                                "label": "C5:3/16",
+                                                                "children": []
+                                                            }
+                                                        ]
+                                                    }
+                                                ]
+                                            },
+                                            {
+                                                "label": "[1/16:1/4:-1/8]",
+                                                "children": [
+                                                    {
+                                                        "label": "C4:1/16",
+                                                        "children": []
+                                                    },
+                                                    {
+                                                        "label": "[0:1/4:-1/8]",
+                                                        "children": [
+                                                            {
+                                                                "label": "C4:1/8",
+                                                                "children": []
+                                                            }
+                                                        ]
+                                                    }
+                                                ]
+                                            }
+                                        ]
+                                    },
+                                    {
+                                        "label": "[1/8:2/4:-1/8]",
+                                        "children": [
+                                            {
+                                                "label": "[1/8:1/4:-1/16]",
+                                                "children": [
+                                                    {
+                                                        "label": "D4:1/8",
+                                                        "children": []
+                                                    },
+                                                    {
+                                                        "label": "[0:1/4:-1/16]",
+                                                        "children": [
+                                                            {
+                                                                "label": "Eb4:3/16",
+                                                                "children": []
+                                                            }
+                                                        ]
+                                                    }
+                                                ]
+                                            },
+                                            {
+                                                "label": "[1/16:1/4:-1/8]",
+                                                "children": [
+                                                    {
+                                                        "label": "F4:1/16",
+                                                        "children": []
+                                                    },
+                                                    {
+                                                        "label": "[0:1/4:-1/8]",
+                                                        "children": [
+                                                            {
+                                                                "label": "G4:1/8",
+                                                                "children": []
+                                                            }
+                                                        ]
+                                                    }
+                                                ]
+                                            }
+                                        ]
+                                    }
+                                ]
+                            }
+                        ]
+                    },
+                    {
+                        "label": "[1/8:1:0]",
+                        "children": [
+                            {
+                                "label": "[1/8:2/4:-1/8]",
+                                "children": [
+                                    {
+                                        "label": "[1/8:1/4:0]",
+                                        "children": [
+                                            {
+                                                "label": "Ab4:1/8",
+                                                "children": []
+                                            },
+                                            {
+                                                "label": "[0:1/4:0]",
+                                                "children": [
+                                                    {
+                                                        "label": "Bb4:1/8",
+                                                        "children": []
+                                                    },
+                                                    {
+                                                        "label": "C5:1/8",
+                                                        "children": []
+                                                    }
+                                                ]
+                                            }
+                                        ]
+                                    },
+                                    {
+                                        "label": "[0:1/4:-1/8]",
+                                        "children": [
+                                            {
+                                                "label": "Bb4:1/8",
+                                                "children": []
+                                            }
+                                        ]
+                                    }
+                                ]
+                            },
+                            {
+                                "label": "[1/8:2/4:0]",
+                                "children": [
+                                    {
+                                        "label": "[0:1/8:0]",
+                                        "children": [
+                                            {
+                                                "label": "C5:1/16",
+                                                "children": []
+                                            },
+                                            {
+                                                "label": "D5:1/16",
+                                                "children": []
+                                            }
+                                        ]
+                                    },
+                                    {
+                                        "label": "[0:2/4:0]",
+                                        "children": [
+                                            {
+                                                "label": "Eb5:1/4",
+                                                "children": []
+                                            },
+                                            {
+                                                "label": "[0:1/4:0]",
+                                                "children": [
+                                                    {
+                                                        "label": "Eb4:1/8",
+                                                        "children": []
+                                                    },
+                                                    {
+                                                        "label": "r:1/8",
+                                                        "children": []
+                                                    }
+                                                ]
+                                            }
+                                        ]
+                                    }
+                                ]
+                            }
+                        ]
+                    }
+                ]
+            }
+        ]
+    }
+},

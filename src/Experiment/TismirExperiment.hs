@@ -236,9 +236,8 @@ newtype SizeFreqDistribution a
 -- What is the dependency among patterns? --
 
 allDependents :: SLFP r k -> Map PatternID (Set PatternID)
-allDependents slfp = Map.fromList $ (id &&& patternDependents slfp) <$> allPatterns
-  where
-    allPatterns = Map.keys (globalPatterns slfp)
+allDependents slfp = Map.fromList $ (id &&& patternDependents slfp) <$> allPatterns slfp
+
 
 data KeyValuePair k v = KeyValuePair {name :: k, value :: v}
     deriving (Generic)
@@ -277,3 +276,6 @@ drawOccuranceInPiece pieceId t =
         ]
 highlightedToColored (True, a) = (brown, a)
 highlightedToColored (False, a) = (white, a)
+
+
+

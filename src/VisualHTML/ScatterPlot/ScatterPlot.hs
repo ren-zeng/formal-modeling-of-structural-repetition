@@ -2,13 +2,13 @@ module VisualHTML.ScatterPlot.ScatterPlot where
 
 import Control.Exception
 
+import Data.Text (Text)
 import qualified Data.Text.IO as TIO
 import Prettyprinter (Doc)
 import Text.Mustache
+import qualified Text.Mustache.Compile as ScatterPlot
 import Text.Printf
 import VisualHTML.MakeHTML
-import qualified Text.Mustache.Compile as ScatterPlot
-import Data.Text (Text)
 
 type D3JSCode = String
 
@@ -35,37 +35,68 @@ instance ToMustache ScatterPlotConfig where
             ]
 
 mkScatterConfigCompression :: String -> FilePath -> IO ScatterPlotConfig
-mkScatterConfigCompression x path = do 
+mkScatterConfigCompression x path = do
     json <- TIO.readFile path
-    return ScatterPlotConfig
-        { figureName = x
-        , dataSet = json
-        , xLabel = "original size"
-        , yLabel = "compressed size"
-        , _X = "originalSize"
-        , _Y = "compressedSize"
-        , _hoverInfo = "pieceName"
-        }
+    return
+        ScatterPlotConfig
+            { figureName = x
+            , dataSet = json
+            , xLabel = "original size"
+            , yLabel = "compressed size"
+            , _X = "originalSize"
+            , _Y = "compressedSize"
+            , _hoverInfo = "pieceName"
+            }
 
-plotScatterCompression :: ScatterPlotConfig -> FilePath  -> IO ()
-plotScatterCompression = mkHTML 
-    "src/VisualHTML/ScatterPlot/ScatterPlot.mustache"
+mkScatterConfigFreqSize :: String -> FilePath -> IO ScatterPlotConfig
+mkScatterConfigFreqSize x path = do
+    json <- TIO.readFile path
+    return
+        ScatterPlotConfig
+            { figureName = x
+            , dataSet = json
+            , xLabel = "frequency"
+            , yLabel = "size"
+            , _X = "frequency"
+            , _Y = "size"
+            , _hoverInfo = "patternID"
+            }
 
+plotScatterCompression :: ScatterPlotConfig -> FilePath -> IO ()
+plotScatterCompression =
+    mkHTML
+        "src/VisualHTML/ScatterPlot/ScatterPlot.mustache"
+
+readPlotScatter ::
+    (String -> FilePath -> IO ScatterPlotConfig) ->
+    String ->
+    FilePath ->
+    FilePath ->
+    IO ()
+readPlotScatter mkConfig figTitle dataPath outPath = do
+    config <- mkConfig figTitle dataPath
+    plotScatterCompression config outPath
 
 main = do
-    jazzConfig <- mkScatterConfigCompression
-        "Piece-wise compression (Jazz Harmony)"
+    readPlotScatter mkScatterConfigCompression
+        "Piece-wise compression (Harmony)"
         "Experiment/Result/Harmony/pieceSizeComparison.json"
-
-    plotScatterCompression 
-        jazzConfig
         "Experiment/Result/Harmony/CompressionScatterPlot(Harmony).html"
-    
-    rhythmConfig <- mkScatterConfigCompression
+
+    readPlotScatter mkScatterConfigCompression
         "Piece-wise compression (Rhythm)"
         "Experiment/Result/Rhythm/Classical/pieceSizeComparison.json"
-    plotScatterCompression
-        rhythmConfig
         "Experiment/Result/Rhythm/Classical/CompressionScatterPlot(Rhythm).html"
+
+    readPlotScatter mkScatterConfigFreqSize 
+        "Frequency vs Size (Harmony)"
+        "Experiment/Result/Harmony/patternInfo.json"
+        "Experiment/Result/Harmony/patternFreqSize(Rhythm).html"
+
+    readPlotScatter mkScatterConfigFreqSize 
+        "Frequency vs Size (Rhythm)"
+        "Experiment/Result/Rhythm/Classical/patternInfo.json"
+        "Experiment/Result/Rhythm/Classical/patternFreqSize(Rhythm).html"
+    
 
 -- >>> main

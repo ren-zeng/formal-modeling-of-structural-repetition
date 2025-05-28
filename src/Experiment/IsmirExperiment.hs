@@ -97,7 +97,7 @@ reportCompression resultDir slfp = do
     -- encodeFile (resultDir <> "/patternHighlightedInCorpus.json") $
     --     report highlightPatternInCorpus final
 
-    let patternInfo = report mkPatternInfo final
+    let patternInfo = mkPatternInfo final <$> Map.keys (globalPatterns final)
     
     encodeFile (resultDir <> "/patternInfo.json") patternInfo
 
@@ -106,10 +106,12 @@ type PatternID = String
 
 
 data PatternInfo r k = PatternInfo {
+    patternID :: PatternID,
     definition :: Pattern (Abstraction r) , 
     dependents :: Set PatternID,
     dependenciesDirect :: Set PatternID,
     globalFreq :: Int,
+    sizeExpanded :: Int,
     occuranceInCorpus :: Set k
 }
     deriving (Generic, Show)
@@ -117,13 +119,17 @@ data PatternInfo r k = PatternInfo {
 instance (ToJSON k,ToJSON r) => ToJSON (PatternInfo r k)
 instance (FromJSON k,FromJSON r, Ord k) => FromJSON (PatternInfo r k)
 
-mkPatternInfo :: SLFP r k -> PatternID -> PatternInfo r k
-mkPatternInfo slfp pId = PatternInfo
-    (globalPatterns slfp Map.! pId)
-    (patternDependents slfp pId)
-    (directDependencies slfp pId)
-    (patternGlobalFreq slfp pId)
-    (patternOccuranceG slfp pId)
+mkPatternInfo :: _ => SLFP r k -> PatternID -> PatternInfo r k
+mkPatternInfo slfp pId = PatternInfo {
+    patternID = pId,
+    definition = globalPatterns slfp Map.! pId,
+    dependents = patternDependents slfp pId,
+    dependenciesDirect = directDependencies slfp pId,
+    globalFreq = patternGlobalFreq slfp pId,
+    sizeExpanded = patternSizeExpanded slfp pId,
+    occuranceInCorpus = patternOccuranceG slfp pId
+    }
+
 
 -- compressCorpus :: _ => (FilePath -> IO [a]) ->
 --     (a -> b) ->
