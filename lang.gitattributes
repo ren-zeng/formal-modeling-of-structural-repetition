@@ -1,0 +1,5 @@
+# excluding output visualization files from language usage
+*.html linguist-vendored
+*.mustache linguist-vendored
+*.js linguist-vendored
+*.css linguist-vendored
