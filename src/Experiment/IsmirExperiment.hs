@@ -22,6 +22,7 @@ import Grammar.JazzHarmony.MusicTheory
 import Grammar.Rhythm.RhythmGrammar (RhythmNT, RhythmRule, RhythmTerminal)
 import Data.Set (Set)
 import Preprocessing.Preprocess
+import qualified Data.Set as Set
 
 proofTreeFolderPath :: String
 proofTreeFolderPath = "experiment/data/ProofTrees"
@@ -90,8 +91,6 @@ reportCompression resultDir slfp = do
         (resultDir <> "sizeCurve.json")
         (uncurry SizeCurve <$> zip [1 ..] (size <$> steps))
 
-    encodeFile (resultDir <> "/patternDepth.json") $ patternDepthInCorpus final
-
     encodeFile (resultDir <> "/patternLocs.json") $  markPatternIdInCorpus final
 
     -- encodeFile (resultDir <> "/patternHighlightedInCorpus.json") $
@@ -112,7 +111,9 @@ data PatternInfo r k = PatternInfo {
     dependenciesDirect :: Set PatternID,
     globalFreq :: Int,
     sizeExpanded :: Int,
-    occuranceInCorpus :: Set k
+    occuranceInCorpus :: Set k,
+    impact :: Double,
+    depths :: [Double]
 }
     deriving (Generic, Show)
 
@@ -127,7 +128,9 @@ mkPatternInfo slfp pId = PatternInfo {
     dependenciesDirect = directDependencies slfp pId,
     globalFreq = patternGlobalFreq slfp pId,
     sizeExpanded = patternSizeExpanded slfp pId,
-    occuranceInCorpus = patternOccuranceG slfp pId
+    occuranceInCorpus = patternOccuranceG slfp pId,
+    depths = patternDepthInCorpus slfp Map.! pId,
+    impact = patternImpact (patternGlobalFreq slfp) (Set.toList . directDependents slfp) pId
     }
 
 

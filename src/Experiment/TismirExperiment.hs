@@ -8,7 +8,9 @@ module Experiment.TismirExperiment (
 
     -- * (Pattern dependencies)
     patternDependents,
+    directDependents,
     directDependencies,
+    patternImpact,
 
     -- * (Where are the patterns?) pattern usage
     patternGlobalFreq,
@@ -51,6 +53,8 @@ import Prettyprinter (pretty)
 import Visualization.BackEnd (BackEnd)
 import Visualization.Text
 import Visualization.Tree (treeDiagram)
+import Data.List
+import Data.Ord
 
 type MetaID = String
 type PatternID = String
@@ -279,3 +283,15 @@ highlightedToColored (False, a) = (white, a)
 
 
 
+
+
+patternImpact :: (PatternID -> Int) -> (PatternID -> [PatternID]) -> 
+    PatternID  -> Double
+patternImpact freq dependents pId = sumOverRank
+    $ fromIntegral . freq <$> dependents pId
+
+sumOverRank :: [Double] -> Double
+sumOverRank xs = sum  $ zipWith (*) [1..] $ sortBy (comparing Down) xs
+
+-- >>> sumOverRank [2,5,1]
+-- 12.0

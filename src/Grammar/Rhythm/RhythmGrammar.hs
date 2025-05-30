@@ -114,7 +114,7 @@ instance ToJSONKey RhythmRule
 instance Pretty RhythmRule where
     pretty = \case 
         Split -> "Split"
-        Respell -> "SplitDrop"
+        Respell -> "Respell"
         Prepare -> "Prepare"
         Shift Early -> "Shift Early"
         Shift Late -> "Shift Late"

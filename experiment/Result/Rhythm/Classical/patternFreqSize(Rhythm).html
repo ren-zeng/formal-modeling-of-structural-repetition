@@ -1,0 +1,464 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>scatter</title>
+    <script src="https://d3js.org/d3.v7.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <style>
+        * {
+            box-sizing: border-box;
+        }
+
+        body {
+            margin: 0;
+            padding: 0;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            overflow-x: hidden;
+        }
+
+        #scatter-plot {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            position: relative;
+            width: 100%;
+            max-width: 1000px;
+            margin: 0 auto;
+            padding: 10px;
+        }
+
+        svg {
+            width: 100%;
+            height: auto;
+            max-height: 100vh;
+        }
+
+        .tooltip {
+            position: absolute;
+            background-color: white;
+            padding: 8px;
+            border: 1px solid #ddd;
+            pointer-events: none;
+            font-size: 14px;
+            box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+            z-index: 100;
+            max-width: 200px;
+        }
+
+        .button-container {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+            z-index: 10;
+        }
+
+        @media (max-width: 768px) {
+            .button-container {
+                position: static;
+                margin: 10px 0;
+                justify-content: center;
+            }
+        }
+
+        .save-button {
+            padding: 8px 16px;
+            background-color: #69b3a2;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+            touch-action: manipulation;
+        }
+
+        .save-button:hover {
+            background-color: #85c7b5;
+        }
+
+        .histogram-bar {
+            fill: #69b3a2;
+            opacity: 0.7;
+        }
+
+        .histogram-bar:hover {
+            fill: #4a7a6e;
+        }
+    </style>
+</head>
+
+<body>
+    <div id="scatter-plot">
+        <div class="button-container">
+            <button class="save-button" onclick="saveSVG()">Save as SVG</button>
+            <button class="save-button" onclick="savePDF()">Save as PDF</button>
+        </div>
+    </div>
+    <script>
+        // Function to save as SVG
+        function saveSVG() {
+            const svgData = document.querySelector('svg').outerHTML;
+            const blob = new Blob([svgData], { type: 'image/svg+xml' });
+            const url = URL.createObjectURL(blob);
+            const link = document.createElement('a');
+            link.href = url;
+            link.download = 'Frequency vs Size (Rhythm).svg';
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            URL.revokeObjectURL(url);
+        }
+
+        // Function to save as PDF
+        function savePDF() {
+            const svgElement = document.querySelector('svg');
+            const svgData = new XMLSerializer().serializeToString(svgElement);
+            const canvas = document.createElement('canvas');
+            const ctx = canvas.getContext('2d');
+            const img = new Image();
+
+            // Scale factor for higher resolution (4x)
+            const scaleFactor = 4;
+            
+            // Get actual SVG dimensions from viewBox
+            const viewBox = svgElement.getAttribute('viewBox').split(' ');
+            const svgWidth = parseFloat(viewBox[2]);
+            const svgHeight = parseFloat(viewBox[3]);
+
+            img.onload = function () {
+                // Set canvas dimensions with scale factor for higher resolution
+                canvas.width = svgWidth * scaleFactor;
+                canvas.height = svgHeight * scaleFactor;
+
+                // Clear canvas and scale the context to match the increased canvas size
+                ctx.clearRect(0, 0, canvas.width, canvas.height);
+                ctx.scale(scaleFactor, scaleFactor);
+                ctx.drawImage(img, 0, 0, svgWidth, svgHeight);
+
+                // Create PDF with proper dimensions that match the SVG's viewBox
+                const imgData = canvas.toDataURL('image/png', 1.0);
+                const { jsPDF } = window.jspdf;
+                
+                // Determine orientation based on aspect ratio
+                const orientation = svgWidth > svgHeight ? 'landscape' : 'portrait';
+                
+                const pdf = new jsPDF({
+                    orientation: orientation,
+                    unit: 'pt', // Use points for more precise sizing
+                    format: [svgWidth, svgHeight],
+                    hotfixes: ['px_scaling']
+                });
+
+                // Add image at full dimensions
+                pdf.addImage(imgData, 'PNG', 0, 0, svgWidth, svgHeight, '', 'FAST');
+                pdf.save('Frequency vs Size (Rhythm).pdf');
+            };
+
+            img.src = 'data:image/svg+xml;base64,' + btoa(unescape(encodeURIComponent(svgData)));
+        }
+
+        // Set up responsive dimensions
+        function getChartDimensions() {
+            const containerWidth = document.getElementById('scatter-plot').clientWidth;
+            let width, height, margin;
+
+            if (containerWidth < 600) {
+                // Mobile dimensions
+                margin = { top: 60, right: 20, bottom: 80, left: 50 };
+                width = containerWidth - margin.left - margin.right;
+                height = Math.min(600, window.innerHeight * 0.7) - margin.top - margin.bottom;
+            } else {
+                // Desktop dimensions
+                margin = { top: 100, right: 30, bottom: 100, left: 60 };
+                width = containerWidth - margin.left - margin.right;
+                height = 800 - margin.top - margin.bottom;
+            }
+
+            return { width, height, margin };
+        }
+
+        // Get dimensions based on screen size
+        const dims = getChartDimensions();
+        const { width, height, margin } = dims;
+        
+        // Calculate histogram dimensions for viewBox adjustments
+        const histogramHeight = height * 0.15;
+        const histogramMargin = 0;
+        
+        // Create the SVG container with adjusted dimensions to fit histograms
+        const svg = d3.select("#scatter-plot")
+            .append("svg")
+            .attr("viewBox", `0 0 ${width + margin.left + margin.right + histogramHeight} ${height + margin.top + margin.bottom + histogramHeight}`)
+            .attr("preserveAspectRatio", "xMidYMid meet")
+            .append("g")
+            .attr("transform", `translate(${margin.left + histogramHeight},${margin.top})`);
+
+        // Create tooltip div
+        const tooltip = d3.select("body").append("div")
+            .attr("class", "tooltip")
+            .style("opacity", 0);
+
+        // Embedded JSON data
+        const data = [{"definition":[1,{"contents":"PG4","tag":"Var"},{"contents":[{"contents":{"tag":"Prepare"},"tag":"Constant"},["RG1",[{"contents":{"tag":"Terminate"},"tag":"Constant"}]]],"tag":"With"}],"dependenciesDirect":["PG4"],"dependents":["PG84"],"globalFreq":2,"occuranceInCorpus":["(Valid)MozartK282:1M05:08","(Valid)SchubertN09M05:08"],"patternID":"PG10","sizeExpanded":5},{"definition":[1,{"contents":{"tag":"Split"},"tag":"Constant"},{"contents":[{"contents":{"tag":"Split"},"tag":"Constant"},["RG2",[]]],"tag":"With"}],"dependenciesDirect":[],"dependents":["PG18","PG37","PG41","PG61","PG65","PG66","PG71","PG72","PG78","PG79"],"globalFreq":10,"occuranceInCorpus":["(Invalid)MozartK280:2M01:08","(Valid)MozartK331:1M01:04","(Valid)MozartK545:2M01:08","(Valid)SchubertN06M05:08","(Valid)SchubertN06M09:14","(Valid)SchubertN09M09:14","(Valid)SchubertN16M05:08","(Valid)SchubertN20M06:19","(Valid)SchumannN07M01:04","(Valid)SchumannN12M02:09"],"patternID":"PG11","sizeExpanded":4},{"definition":[1,{"contents":{"tag":"Prepare"},"tag":"Constant"},{"contents":"PG5","tag":"Var"}],"dependenciesDirect":["PG5"],"dependents":["PG34","PG52","PG85","PG86","PG87"],"globalFreq":10,"occuranceInCorpus":["(Valid)MozartK282:1M01:04","(Valid)MozartK282:1M05:08","(Valid)MozartK310:2M01:04","(Valid)MozartK545:2M01:08","(Valid)MozartK570:2M01:04","(Valid)SchubertN08M11:20","(Valid)SchubertN09M09:14","(Valid)SchubertN22M05:09","(Valid)SchumannN03M10:15","(Valid)SchumannN05M07:14"],"patternID":"PG12","sizeExpanded":6},{"definition":[1,{"contents":{"tag":"Split"},"tag":"Constant"},{"contents":[{"contents":{"tag":"Split"},"tag":"Constant"},["RG1",[{"contents":[{"contents":{"tag":"Prepare"},"tag":"Constant"},["RG1",[{"contents":{"tag":"Terminate"},"tag":"Constant"}]]],"tag":"With"}]]],"tag":"With"}],"dependenciesDirect":[],"dependents":["PG67","PG75","PG88"],"globalFreq":4,"occuranceInCorpus":["(Valid)SchubertN12M07:10","(Valid)SchubertN13M10:25","(Valid)SchubertN18M04:08","(Valid)SchumannN06M02:07"],"patternID":"PG13","sizeExpanded":8},{"definition":[2,{"contents":{"tag":"Split"},"tag":"Constant"},{"contents":[{"contents":{"tag":"Prepare"},"tag":"Constant"},["RG1",[{"contents":{"tag":"Terminate"},"tag":"Constant"}]]],"tag":"With"}],"dependenciesDirect":[],"dependents":["PG51","PG71","PG79"],"globalFreq":2,"occuranceInCorpus":["(Valid)SchubertN06M05:08","(Valid)SchubertN06M09:14"],"patternID":"PG17","sizeExpanded":4},{"definition":[2,{"contents":"PG11","tag":"Var"},{"contents":[{"contents":{"tag":"Prepare"},"tag":"Constant"},["RG1",[{"contents":{"tag":"Terminate"},"tag":"Constant"}]]],"tag":"With"}],"dependenciesDirect":["PG11"],"dependents":["PG65","PG66","PG71","PG72","PG78","PG79"],"globalFreq":4,"occuranceInCorpus":["(Valid)SchubertN06M05:08","(Valid)SchubertN06M09:14","(Valid)SchubertN16M05:08","(Valid)SchumannN07M01:04"],"patternID":"PG18","sizeExpanded":7},{"definition":[1,{"contents":"PG7","tag":"Var"},{"contents":[{"contents":{"tag":"Split"},"tag":"Constant"},["RG1",[{"contents":{"tag":"Terminate"},"tag":"Constant"}]]],"tag":"With"}],"dependenciesDirect":["PG7"],"dependents":["PG83","PG87"],"globalFreq":4,"occuranceInCorpus":["(Valid)MozartK282:1M05:08","(Valid)SchubertN05M09:12","(Valid)SchubertN08M11:20","(Valid)SchumannN03M10:15"],"patternID":"PG19","sizeExpanded":5},{"definition":[1,{"contents":"PG3","tag":"Var"},{"contents":"PG8","tag":"Var"}],"dependenciesDirect":["PG3","PG8"],"dependents":["PG51","PG71","PG79"],"globalFreq":2,"occuranceInCorpus":["(Valid)SchubertN06M05:08","(Valid)SchubertN06M09:14"],"patternID":"PG20","sizeExpanded":6},{"definition":[1,{"contents":{"tag":"Respell"},"tag":"Constant"},{"contents":{"tag":"Terminate"},"tag":"Constant"}],"dependenciesDirect":[],"dependents":[],"globalFreq":5,"occuranceInCorpus":["(Valid)MozartK282:1M01:04","(Valid)MozartK310:2M01:04","(Valid)MozartK332:2M01:04","(Valid)MozartK457:2M01:03","(Valid)SchubertN01M08:11"],"patternID":"PG21","sizeExpanded":2},{"definition":[4,{"contents":[{"contents":{"tag":"Split"},"tag":"Constant"},["RG1",[{"contents":{"tag":"Prepare"},"tag":"Constant"}]]],"tag":"With"},{"contents":[{"contents":{"tag":"Split"},"tag":"Constant"},["RG1",[{"contents":{"tag":"Terminate"},"tag":"Constant"}]]],"tag":"With"}],"dependenciesDirect":[],"dependents":["PG43","PG59","PG64"],"globalFreq":4,"occuranceInCorpus":["(Valid)MozartK310:2M01:04","(Valid)SchubertN12M07:10","(Valid)SchubertN18M04:08","(Valid)SchubertN20M06:19"],"patternID":"PG22","sizeExpanded":6},{"definition":[1,{"contents":"PG7","tag":"Var"},{"contents":[{"contents":{"tag":"Prepare"},"tag":"Constant"},["RG1",[{"contents":{"tag":"Terminate"},"tag":"Constant"}]]],"tag":"With"}],"dependenciesDirect":["PG7"],"dependents":["PG81"],"globalFreq":2,"occuranceInCorpus":["(Valid)MozartK545:2M01:08","(Valid)SchubertN14M05:08"],"patternID":"PG23","sizeExpanded":5},{"definition":[1,{"contents":"PG6","tag":"Var"},{"contents":[{"contents":{"tag":"Prepare"},"tag":"Constant"},["RG1",[{"contents":{"tag":"Terminate"},"tag":"Constant"}]]],"tag":"With"}],"dependenciesDirect":["PG6"],"dependents":[],"globalFreq":3,"occuranceInCorpus":["(Invalid)MozartK280:2M01:08","(Valid)SchumannN04M01:04","(Valid)SchumannN11M03:04"],"patternID":"PG24","sizeExpanded":5},{"definition":[1,{"contents":"PG4","tag":"Var"},{"contents":"PG9","tag":"Var"}],"dependenciesDirect":["PG4","PG9"],"dependents":["PG52"],"globalFreq":2,"occuranceInCorpus":["(Valid)MozartK282:1M05:08","(Valid)MozartK310:2M01:04"],"patternID":"PG25","sizeExpanded":7},{"definition":[1,{"contents":{"tag":"Prepare"},"tag":"Constant"},{"contents":[{"contents":{"tag":"Prepare"},"tag":"Constant"},["RG1",[{"contents":{"tag":"Terminate"},"tag":"Constant"}]]],"tag":"With"}],"dependenciesDirect":[],"dependents":[],"globalFreq":4,"occuranceInCorpus":["(Invalid)MozartK280:2M01:08","(Valid)MozartK331:1M01:04","(Valid)SchubertN09M09:14","(Valid)SchumannN12M02:09"],"patternID":"PG26","sizeExpanded":4},{"definition":[4,{"contents":[{"contents":{"tag":"Split"},"tag":"Constant"},["RG1",[{"contents":[{"contents":{"tag":"Split"},"tag":"Constant"},["RG2",[]]],"tag":"With"}]]],"tag":"With"},{"contents":{"tag":"Terminate"},"tag":"Constant"}],"dependenciesDirect":[],"dependents":["PG42","PG56","PG58","PG60","PG73"],"globalFreq":4,"occuranceInCorpus":["(Valid)SchubertN02M06:09","(Valid)SchubertN15M06:09","(Valid)SchubertN19M06:12","(Valid)SchumannN05M07:14"],"patternID":"PG29","sizeExpanded":8},{"definition":[1,{"contents":{"tag":"Prepare"},"tag":"Constant"},{"contents":{"tag":"Terminate"},"tag":"Constant"}],"dependenciesDirect":[],"dependents":["PG12","PG20","PG31","PG33","PG34","PG47","PG48","PG5","PG50","PG51","PG52","PG70","PG71","PG79","PG83","PG84","PG85","PG86","PG87"],"globalFreq":27,"occuranceInCorpus":["(Valid)MozartK279:2M01:06","(Valid)MozartK282:1M01:04","(Valid)MozartK282:1M05:08","(Valid)MozartK283:2M01:04","(Valid)MozartK310:2M01:04","(Valid)MozartK457:2M01:03","(Valid)MozartK545:2M01:08","(Valid)MozartK570:2M01:04","(Valid)SchubertN01M08:11","(Valid)SchubertN02M06:09","(Valid)SchubertN05M09:12","(Valid)SchubertN06M05:08","(Valid)SchubertN06M09:14","(Valid)SchubertN08M11:20","(Valid)SchubertN09M05:08","(Valid)SchubertN09M09:14","(Valid)SchubertN10M07:15","(Valid)SchubertN12M07:10","(Valid)SchubertN16M05:08","(Valid)SchubertN18M04:08","(Valid)SchubertN19M06:12","(Valid)SchubertN22M05:09","(Valid)SchumannN03M10:15","(Valid)SchumannN05M07:14","(Valid)SchumannN06M02:07","(Valid)SchumannN07M01:04","(Valid)SchumannN12M02:09"],"patternID":"PG3","sizeExpanded":2},{"definition":[2,{"contents":[{"contents":{"tag":"Split"},"tag":"Constant"},["RG1",[{"contents":[{"contents":{"tag":"Prepare"},"tag":"Constant"},["RG1",[{"contents":{"tag":"Terminate"},"tag":"Constant"}]]],"tag":"With"}]]],"tag":"With"},{"contents":[{"contents":{"tag":"Split"},"tag":"Constant"},["RG1",[{"contents":{"tag":"Terminate"},"tag":"Constant"}]]],"tag":"With"}],"dependenciesDirect":[],"dependents":["PG49"],"globalFreq":2,"occuranceInCorpus":["(Valid)MozartK332:2M01:04","(Valid)SchumannN07M01:04"],"patternID":"PG30","sizeExpanded":7},{"definition":[1,{"contents":"PG6","tag":"Var"},{"contents":"PG5","tag":"Var"}],"dependenciesDirect":["PG5","PG6"],"dependents":[],"globalFreq":3,"occuranceInCorpus":["(Valid)MozartK283:2M01:04","(Valid)SchubertN16M05:08","(Valid)SchumannN12M02:09"],"patternID":"PG31","sizeExpanded":7},{"definition":[1,{"contents":"PG4","tag":"Var"},{"contents":[{"contents":{"tag":"Split"},"tag":"Constant"},["RG1",[{"contents":{"tag":"Terminate"},"tag":"Constant"}]]],"tag":"With"}],"dependenciesDirect":["PG4"],"dependents":[],"globalFreq":4,"occuranceInCorpus":["(Invalid)MozartK280:2M01:08","(Valid)MozartK279:2M01:06","(Valid)MozartK282:1M01:04","(Valid)MozartK330:2M01:04"],"patternID":"PG32","sizeExpanded":5},{"definition":[1,{"contents":"PG3","tag":"Var"},{"contents":[{"contents":"PG4","tag":"Var"},["RG1",[{"contents":{"tag":"Terminate"},"tag":"Constant"}]]],"tag":"With"}],"dependenciesDirect":["PG3","PG4"],"dependents":[],"globalFreq":4,"occuranceInCorpus":["(Valid)MozartK279:2M01:06","(Valid)SchubertN02M06:09","(Valid)SchubertN09M05:08","(Valid)SchubertN19M06:12"],"patternID":"PG33","sizeExpanded":6},{"definition":[1,{"contents":"PG12","tag":"Var"},{"contents":[{"contents":{"tag":"Split"},"tag":"Constant"},["RG1",[{"contents":{"tag":"Terminate"},"tag":"Constant"}]]],"tag":"With"}],"dependenciesDirect":["PG12"],"dependents":[],"globalFreq":5,"occuranceInCorpus":["(Valid)MozartK282:1M05:08","(Valid)SchubertN08M11:20","(Valid)SchubertN22M05:09","(Valid)SchumannN03M10:15","(Valid)SchumannN05M07:14"],"patternID":"PG34","sizeExpanded":9},{"definition":[1,{"contents":{"contents":"Early","tag":"Shift"},"tag":"Constant"},{"contents":{"tag":"Terminate"},"tag":"Constant"}],"dependenciesDirect":[],"dependents":[],"globalFreq":1,"occuranceInCorpus":["(Valid)MozartK310:2M01:04"],"patternID":"PG35","sizeExpanded":2},{"definition":[4,{"contents":[{"contents":{"tag":"Split"},"tag":"Constant"},["RG2",[]]],"tag":"With"},{"contents":[{"contents":{"tag":"Prepare"},"tag":"Constant"},["RG1",[{"contents":{"tag":"Terminate"},"tag":"Constant"}]]],"tag":"With"}],"dependenciesDirect":[],"dependents":["PG63"],"globalFreq":2,"occuranceInCorpus":["(Valid)SchubertN10M07:15","(Valid)SchumannN06M02:07"],"patternID":"PG36","sizeExpanded":6},{"definition":[1,{"contents":"PG11","tag":"Var"},{"contents":{"tag":"Terminate"},"tag":"Constant"}],"dependenciesDirect":["PG11"],"dependents":[],"globalFreq":4,"occuranceInCorpus":["(Invalid)MozartK280:2M01:08","(Valid)MozartK331:1M01:04","(Valid)MozartK545:2M01:08","(Valid)SchubertN09M09:14"],"patternID":"PG37","sizeExpanded":5},{"definition":[1,{"contents":{"tag":"Prepare"},"tag":"Constant"},{"contents":[{"contents":[{"contents":{"tag":"Prepare"},"tag":"Constant"},["RG1",[{"contents":[{"contents":{"tag":"Split"},"tag":"Constant"},["RG1",[{"contents":{"tag":"Terminate"},"tag":"Constant"}]]],"tag":"With"}]]],"tag":"With"},["RG1",[{"contents":[{"contents":{"tag":"Split"},"tag":"Constant"},["RG1",[{"contents":{"tag":"Terminate"},"tag":"Constant"}]]],"tag":"With"}]]],"tag":"With"}],"dependenciesDirect":[],"dependents":["PG82"],"globalFreq":2,"occuranceInCorpus":["(Valid)MozartK310:2M01:04","(Valid)MozartK332:2M01:04"],"patternID":"PG39","sizeExpanded":8},{"definition":[1,{"contents":{"tag":"Split"},"tag":"Constant"},{"contents":{"tag":"Terminate"},"tag":"Constant"}],"dependenciesDirect":[],"dependents":["PG10","PG25","PG32","PG33","PG52","PG61","PG68","PG70","PG77","PG81","PG84","PG86"],"globalFreq":17,"occuranceInCorpus":["(Invalid)MozartK280:2M01:08","(Valid)MozartK279:2M01:06","(Valid)MozartK281:2M02:09","(Valid)MozartK282:1M01:04","(Valid)MozartK282:1M05:08","(Valid)MozartK283:2M01:04","(Valid)MozartK310:2M01:04","(Valid)MozartK330:2M01:04","(Valid)MozartK545:2M01:08","(Valid)MozartK570:2M01:04","(Valid)SchubertN02M06:09","(Valid)SchubertN09M05:08","(Valid)SchubertN14M05:08","(Valid)SchubertN19M06:12","(Valid)SchubertN20M06:19","(Valid)SchumannN06M02:07","(Valid)SchumannN12M02:09"],"patternID":"PG4","sizeExpanded":2},{"definition":[4,{"contents":"PG11","tag":"Var"},{"contents":{"tag":"Terminate"},"tag":"Constant"}],"dependenciesDirect":["PG11"],"dependents":["PG61"],"globalFreq":2,"occuranceInCorpus":["(Valid)SchubertN20M06:19","(Valid)SchumannN12M02:09"],"patternID":"PG41","sizeExpanded":5},{"definition":[2,{"contents":"PG29","tag":"Var"},{"contents":{"tag":"Terminate"},"tag":"Constant"}],"dependenciesDirect":["PG29"],"dependents":["PG58"],"globalFreq":2,"occuranceInCorpus":["(Valid)SchubertN02M06:09","(Valid)SchubertN15M06:09"],"patternID":"PG42","sizeExpanded":9},{"definition":[2,{"contents":"PG22","tag":"Var"},{"contents":{"tag":"Terminate"},"tag":"Constant"}],"dependenciesDirect":["PG22"],"dependents":["PG59"],"globalFreq":2,"occuranceInCorpus":["(Valid)MozartK310:2M01:04","(Valid)SchubertN18M04:08"],"patternID":"PG43","sizeExpanded":7},{"definition":[2,{"contents":{"tag":"Prepare"},"tag":"Constant"},{"contents":[{"contents":{"tag":"Split"},"tag":"Constant"},["RG1",[{"contents":{"tag":"Terminate"},"tag":"Constant"}]]],"tag":"With"}],"dependenciesDirect":[],"dependents":[],"globalFreq":3,"occuranceInCorpus":["(Valid)MozartK279:2M01:06","(Valid)SchubertN19M06:12","(Valid)SchubertN22M05:09"],"patternID":"PG44","sizeExpanded":4},{"definition":[2,{"contents":{"tag":"Split"},"tag":"Constant"},{"contents":[{"contents":{"tag":"Split"},"tag":"Constant"},["RG1",[{"contents":{"tag":"Terminate"},"tag":"Constant"}]]],"tag":"With"}],"dependenciesDirect":[],"dependents":["PG48"],"globalFreq":3,"occuranceInCorpus":["(Valid)MozartK457:2M01:03","(Valid)SchubertN01M08:11","(Valid)SchubertN12M07:10"],"patternID":"PG45","sizeExpanded":4},{"definition":[1,{"contents":[{"contents":{"tag":"Prepare"},"tag":"Constant"},["RG1",[{"contents":[{"contents":{"tag":"Split"},"tag":"Constant"},["RG1",[{"contents":{"tag":"Terminate"},"tag":"Constant"}]]],"tag":"With"}]]],"tag":"With"},{"contents":{"tag":"Terminate"},"tag":"Constant"}],"dependenciesDirect":[],"dependents":[],"globalFreq":1,"occuranceInCorpus":["(Valid)MozartK457:2M01:03"],"patternID":"PG46","sizeExpanded":7},{"definition":[1,{"contents":"PG7","tag":"Var"},{"contents":"PG5","tag":"Var"}],"dependenciesDirect":["PG5","PG7"],"dependents":[],"globalFreq":3,"occuranceInCorpus":["(Valid)MozartK282:1M05:08","(Valid)SchubertN10M07:15","(Valid)SchumannN07M01:04"],"patternID":"PG47","sizeExpanded":7},{"definition":[1,{"contents":"PG45","tag":"Var"},{"contents":"PG5","tag":"Var"}],"dependenciesDirect":["PG45","PG5"],"dependents":[],"globalFreq":3,"occuranceInCorpus":["(Valid)MozartK457:2M01:03","(Valid)SchubertN01M08:11","(Valid)SchubertN12M07:10"],"patternID":"PG48","sizeExpanded":9},{"definition":[1,{"contents":"PG30","tag":"Var"},{"contents":{"tag":"Terminate"},"tag":"Constant"}],"dependenciesDirect":["PG30"],"dependents":[],"globalFreq":2,"occuranceInCorpus":["(Valid)MozartK332:2M01:04","(Valid)SchumannN07M01:04"],"patternID":"PG49","sizeExpanded":7},{"definition":[1,{"contents":"PG3","tag":"Var"},{"contents":[{"contents":{"tag":"Split"},"tag":"Constant"},["RG1",[{"contents":{"tag":"Terminate"},"tag":"Constant"}]]],"tag":"With"}],"dependenciesDirect":["PG3"],"dependents":["PG12","PG31","PG34","PG47","PG48","PG52","PG85","PG86","PG87"],"globalFreq":18,"occuranceInCorpus":["(Valid)MozartK282:1M01:04","(Valid)MozartK282:1M05:08","(Valid)MozartK283:2M01:04","(Valid)MozartK310:2M01:04","(Valid)MozartK457:2M01:03","(Valid)MozartK545:2M01:08","(Valid)MozartK570:2M01:04","(Valid)SchubertN01M08:11","(Valid)SchubertN08M11:20","(Valid)SchubertN09M09:14","(Valid)SchubertN10M07:15","(Valid)SchubertN12M07:10","(Valid)SchubertN16M05:08","(Valid)SchubertN22M05:09","(Valid)SchumannN03M10:15","(Valid)SchumannN05M07:14","(Valid)SchumannN07M01:04","(Valid)SchumannN12M02:09"],"patternID":"PG5","sizeExpanded":5},{"definition":[1,{"contents":"PG3","tag":"Var"},{"contents":[{"contents":{"tag":"Split"},"tag":"Constant"},["RG1",[{"contents":[{"contents":{"tag":"Split"},"tag":"Constant"},["RG1",[{"contents":{"tag":"Terminate"},"tag":"Constant"}]]],"tag":"With"}]]],"tag":"With"}],"dependenciesDirect":["PG3"],"dependents":[],"globalFreq":2,"occuranceInCorpus":["(Valid)SchubertN18M04:08","(Valid)SchubertN22M05:09"],"patternID":"PG50","sizeExpanded":9},{"definition":[1,{"contents":"PG17","tag":"Var"},{"contents":"PG20","tag":"Var"}],"dependenciesDirect":["PG17","PG20"],"dependents":["PG71","PG79"],"globalFreq":2,"occuranceInCorpus":["(Valid)SchubertN06M05:08","(Valid)SchubertN06M09:14"],"patternID":"PG51","sizeExpanded":10},{"definition":[1,{"contents":"PG12","tag":"Var"},{"contents":"PG25","tag":"Var"}],"dependenciesDirect":["PG12","PG25"],"dependents":[],"globalFreq":2,"occuranceInCorpus":["(Valid)MozartK282:1M05:08","(Valid)MozartK310:2M01:04"],"patternID":"PG52","sizeExpanded":13},{"definition":[8,{"contents":[{"contents":{"tag":"Split"},"tag":"Constant"},["RG1",[{"contents":[{"contents":{"tag":"Split"},"tag":"Constant"},["RG2",[]]],"tag":"With"}]]],"tag":"With"},{"contents":[{"contents":{"tag":"Split"},"tag":"Constant"},["RG1",[{"contents":{"tag":"Terminate"},"tag":"Constant"}]]],"tag":"With"}],"dependenciesDirect":[],"dependents":[],"globalFreq":2,"occuranceInCorpus":["(Valid)MozartK457:2M01:03","(Valid)SchubertN03M08:15"],"patternID":"PG54","sizeExpanded":10},{"definition":[8,{"contents":[{"contents":{"tag":"Split"},"tag":"Constant"},["RG1",[{"contents":[{"contents":{"tag":"Split"},"tag":"Constant"},["RG2",[]]],"tag":"With"}]]],"tag":"With"},{"contents":{"tag":"Terminate"},"tag":"Constant"}],"dependenciesDirect":[],"dependents":["PG74"],"globalFreq":2,"occuranceInCorpus":["(Valid)MozartK282:1M01:04","(Valid)SchumannN04M01:04"],"patternID":"PG55","sizeExpanded":8},{"definition":[7,{"contents":"PG29","tag":"Var"},{"contents":{"tag":"Terminate"},"tag":"Constant"}],"dependenciesDirect":["PG29"],"dependents":["PG60","PG73"],"globalFreq":2,"occuranceInCorpus":["(Valid)SchubertN19M06:12","(Valid)SchumannN05M07:14"],"patternID":"PG56","sizeExpanded":9},{"definition":[6,{"contents":[{"contents":{"tag":"Split"},"tag":"Constant"},["RG16",[{"contents":[{"contents":{"tag":"Split"},"tag":"Constant"},["RG1",[{"contents":{"tag":"Prepare"},"tag":"Constant"}]]],"tag":"With"}]]],"tag":"With"},{"contents":[{"contents":{"tag":"Split"},"tag":"Constant"},["RG1",[{"contents":{"tag":"Terminate"},"tag":"Constant"}]]],"tag":"With"}],"dependenciesDirect":[],"dependents":[],"globalFreq":2,"occuranceInCorpus":["(Valid)SchubertN06M09:14","(Valid)SchubertN09M05:08"],"patternID":"PG57","sizeExpanded":8},{"definition":[6,{"contents":"PG42","tag":"Var"},{"contents":[{"contents":{"tag":"Split"},"tag":"Constant"},["RG1",[{"contents":{"tag":"Terminate"},"tag":"Constant"}]]],"tag":"With"}],"dependenciesDirect":["PG42"],"dependents":[],"globalFreq":2,"occuranceInCorpus":["(Valid)SchubertN02M06:09","(Valid)SchubertN15M06:09"],"patternID":"PG58","sizeExpanded":12},{"definition":[4,{"contents":[{"contents":{"tag":"Split"},"tag":"Constant"},["RG2",[]]],"tag":"With"},{"contents":"PG43","tag":"Var"}],"dependenciesDirect":["PG43"],"dependents":[],"globalFreq":2,"occuranceInCorpus":["(Valid)MozartK310:2M01:04","(Valid)SchubertN18M04:08"],"patternID":"PG59","sizeExpanded":10},{"definition":[2,{"contents":{"tag":"Prepare"},"tag":"Constant"},{"contents":{"tag":"Terminate"},"tag":"Constant"}],"dependenciesDirect":[],"dependents":["PG24","PG25","PG31","PG52","PG80","PG9"],"globalFreq":10,"occuranceInCorpus":["(Invalid)MozartK280:2M01:08","(Valid)MozartK282:1M05:08","(Valid)MozartK283:2M01:04","(Valid)MozartK310:2M01:04","(Valid)MozartK545:2M01:08","(Valid)SchubertN16M05:08","(Valid)SchumannN04M01:04","(Valid)SchumannN06M02:07","(Valid)SchumannN11M03:04","(Valid)SchumannN12M02:09"],"patternID":"PG6","sizeExpanded":2},{"definition":[4,{"contents":"PG56","tag":"Var"},{"contents":[{"contents":{"tag":"Prepare"},"tag":"Constant"},["RG1",[{"contents":{"tag":"Terminate"},"tag":"Constant"}]]],"tag":"With"}],"dependenciesDirect":["PG56"],"dependents":["PG73"],"globalFreq":2,"occuranceInCorpus":["(Valid)SchubertN19M06:12","(Valid)SchumannN05M07:14"],"patternID":"PG60","sizeExpanded":12},{"definition":[4,{"contents":"PG41","tag":"Var"},{"contents":"PG4","tag":"Var"}],"dependenciesDirect":["PG4","PG41"],"dependents":[],"globalFreq":2,"occuranceInCorpus":["(Valid)SchubertN20M06:19","(Valid)SchumannN12M02:09"],"patternID":"PG61","sizeExpanded":7},{"definition":[3,{"contents":[{"contents":{"tag":"Split"},"tag":"Constant"},["RG2",[]]],"tag":"With"},{"contents":{"tag":"Terminate"},"tag":"Constant"}],"dependenciesDirect":[],"dependents":[],"globalFreq":2,"occuranceInCorpus":["(Valid)SchubertN10M07:15","(Valid)SchubertN22M05:09"],"patternID":"PG62","sizeExpanded":4},{"definition":[3,{"contents":"PG36","tag":"Var"},{"contents":[{"contents":{"tag":"Prepare"},"tag":"Constant"},["RG1",[{"contents":{"tag":"Terminate"},"tag":"Constant"}]]],"tag":"With"}],"dependenciesDirect":["PG36"],"dependents":[],"globalFreq":2,"occuranceInCorpus":["(Valid)SchubertN10M07:15","(Valid)SchumannN06M02:07"],"patternID":"PG63","sizeExpanded":9},{"definition":[3,{"contents":"PG22","tag":"Var"},{"contents":[{"contents":{"tag":"Split"},"tag":"Constant"},["RG1",[{"contents":[{"contents":{"tag":"Split"},"tag":"Constant"},["RG1",[{"contents":{"tag":"Terminate"},"tag":"Constant"}]]],"tag":"With"}]]],"tag":"With"}],"dependenciesDirect":["PG22"],"dependents":[],"globalFreq":2,"occuranceInCorpus":["(Valid)SchubertN12M07:10","(Valid)SchubertN20M06:19"],"patternID":"PG64","sizeExpanded":13},{"definition":[3,{"contents":"PG18","tag":"Var"},{"contents":[{"contents":{"tag":"Prepare"},"tag":"Constant"},["RG1",[{"contents":{"tag":"Terminate"},"tag":"Constant"}]]],"tag":"With"}],"dependenciesDirect":["PG18"],"dependents":["PG72","PG78"],"globalFreq":2,"occuranceInCorpus":["(Valid)SchubertN16M05:08","(Valid)SchumannN07M01:04"],"patternID":"PG65","sizeExpanded":10},{"definition":[3,{"contents":"PG18","tag":"Var"},{"contents":[{"contents":{"tag":"Split"},"tag":"Constant"},["RG1",[{"contents":{"tag":"Terminate"},"tag":"Constant"}]]],"tag":"With"}],"dependenciesDirect":["PG18"],"dependents":["PG71","PG79"],"globalFreq":2,"occuranceInCorpus":["(Valid)SchubertN06M05:08","(Valid)SchubertN06M09:14"],"patternID":"PG66","sizeExpanded":10},{"definition":[3,{"contents":"PG13","tag":"Var"},{"contents":"PG7","tag":"Var"}],"dependenciesDirect":["PG13","PG7"],"dependents":["PG88"],"globalFreq":2,"occuranceInCorpus":["(Valid)SchubertN13M10:25","(Valid)SchumannN06M02:07"],"patternID":"PG67","sizeExpanded":10},{"definition":[2,{"contents":[{"contents":{"tag":"Split"},"tag":"Constant"},["RG2",[]]],"tag":"With"},{"contents":"PG4","tag":"Var"}],"dependenciesDirect":["PG4"],"dependents":["PG70"],"globalFreq":2,"occuranceInCorpus":["(Valid)MozartK283:2M01:04","(Valid)SchumannN06M02:07"],"patternID":"PG68","sizeExpanded":5},{"definition":[2,{"contents":[{"contents":{"tag":"Split"},"tag":"Constant"},["RG1",[{"contents":[{"contents":{"tag":"Prepare"},"tag":"Constant"},["RG1",[{"contents":{"tag":"Terminate"},"tag":"Constant"}]]],"tag":"With"}]]],"tag":"With"},{"contents":{"tag":"Terminate"},"tag":"Constant"}],"dependenciesDirect":[],"dependents":[],"globalFreq":2,"occuranceInCorpus":["(Valid)SchubertN03M08:15","(Valid)SchubertN18M04:08"],"patternID":"PG69","sizeExpanded":7},{"definition":[2,{"contents":{"tag":"Split"},"tag":"Constant"},{"contents":{"tag":"Terminate"},"tag":"Constant"}],"dependenciesDirect":[],"dependents":["PG19","PG23","PG47","PG67","PG80","PG81","PG83","PG85","PG87","PG88"],"globalFreq":12,"occuranceInCorpus":["(Valid)MozartK282:1M01:04","(Valid)MozartK282:1M05:08","(Valid)MozartK545:2M01:08","(Valid)SchubertN05M09:12","(Valid)SchubertN08M11:20","(Valid)SchubertN09M09:14","(Valid)SchubertN10M07:15","(Valid)SchubertN13M10:25","(Valid)SchubertN14M05:08","(Valid)SchumannN03M10:15","(Valid)SchumannN06M02:07","(Valid)SchumannN07M01:04"],"patternID":"PG7","sizeExpanded":2},{"definition":[2,{"contents":"PG68","tag":"Var"},{"contents":"PG3","tag":"Var"}],"dependenciesDirect":["PG3","PG68"],"dependents":[],"globalFreq":2,"occuranceInCorpus":["(Valid)MozartK283:2M01:04","(Valid)SchumannN06M02:07"],"patternID":"PG70","sizeExpanded":7},{"definition":[2,{"contents":"PG66","tag":"Var"},{"contents":"PG51","tag":"Var"}],"dependenciesDirect":["PG51","PG66"],"dependents":["PG79"],"globalFreq":2,"occuranceInCorpus":["(Valid)SchubertN06M05:08","(Valid)SchubertN06M09:14"],"patternID":"PG71","sizeExpanded":20},{"definition":[2,{"contents":"PG65","tag":"Var"},{"contents":[{"contents":{"tag":"Prepare"},"tag":"Constant"},["RG1",[{"contents":{"tag":"Terminate"},"tag":"Constant"}]]],"tag":"With"}],"dependenciesDirect":["PG65"],"dependents":["PG78"],"globalFreq":2,"occuranceInCorpus":["(Valid)SchubertN16M05:08","(Valid)SchumannN07M01:04"],"patternID":"PG72","sizeExpanded":13},{"definition":[2,{"contents":"PG60","tag":"Var"},{"contents":[{"contents":{"tag":"Prepare"},"tag":"Constant"},["RG1",[{"contents":{"tag":"Terminate"},"tag":"Constant"}]]],"tag":"With"}],"dependenciesDirect":["PG60"],"dependents":[],"globalFreq":2,"occuranceInCorpus":["(Valid)SchubertN19M06:12","(Valid)SchumannN05M07:14"],"patternID":"PG73","sizeExpanded":15},{"definition":[2,{"contents":"PG55","tag":"Var"},{"contents":[{"contents":{"tag":"Prepare"},"tag":"Constant"},["RG1",[{"contents":{"tag":"Terminate"},"tag":"Constant"}]]],"tag":"With"}],"dependenciesDirect":["PG55"],"dependents":[],"globalFreq":2,"occuranceInCorpus":["(Valid)MozartK282:1M01:04","(Valid)SchumannN04M01:04"],"patternID":"PG74","sizeExpanded":11},{"definition":[2,{"contents":"PG13","tag":"Var"},{"contents":[{"contents":{"tag":"Split"},"tag":"Constant"},["RG1",[{"contents":{"tag":"Terminate"},"tag":"Constant"}]]],"tag":"With"}],"dependenciesDirect":["PG13"],"dependents":[],"globalFreq":2,"occuranceInCorpus":["(Valid)SchubertN12M07:10","(Valid)SchubertN18M04:08"],"patternID":"PG75","sizeExpanded":11},{"definition":[2,{"contents":{"tag":"Prepare"},"tag":"Constant"},{"contents":"PG8","tag":"Var"}],"dependenciesDirect":["PG8"],"dependents":[],"globalFreq":2,"occuranceInCorpus":["(Valid)MozartK282:1M01:04","(Valid)MozartK457:2M01:03"],"patternID":"PG76","sizeExpanded":5},{"definition":[2,{"contents":{"tag":"Split"},"tag":"Constant"},{"contents":[{"contents":"PG4","tag":"Var"},["RG1",[{"contents":{"tag":"Terminate"},"tag":"Constant"}]]],"tag":"With"}],"dependenciesDirect":["PG4"],"dependents":[],"globalFreq":2,"occuranceInCorpus":["(Valid)MozartK279:2M01:06","(Valid)MozartK281:2M02:09"],"patternID":"PG77","sizeExpanded":5},{"definition":[1,{"contents":"PG72","tag":"Var"},{"contents":{"tag":"Terminate"},"tag":"Constant"}],"dependenciesDirect":["PG72"],"dependents":[],"globalFreq":2,"occuranceInCorpus":["(Valid)SchubertN16M05:08","(Valid)SchumannN07M01:04"],"patternID":"PG78","sizeExpanded":14},{"definition":[1,{"contents":"PG71","tag":"Var"},{"contents":"PG8","tag":"Var"}],"dependenciesDirect":["PG71","PG8"],"dependents":[],"globalFreq":2,"occuranceInCorpus":["(Valid)SchubertN06M05:08","(Valid)SchubertN06M09:14"],"patternID":"PG79","sizeExpanded":24},{"definition":[1,{"contents":{"tag":"Respell"},"tag":"Constant"},{"contents":[{"contents":{"tag":"Split"},"tag":"Constant"},["RG1",[{"contents":{"tag":"Terminate"},"tag":"Constant"}]]],"tag":"With"}],"dependenciesDirect":[],"dependents":["PG20","PG51","PG71","PG76","PG79"],"globalFreq":4,"occuranceInCorpus":["(Valid)MozartK282:1M01:04","(Valid)MozartK457:2M01:03","(Valid)SchubertN06M05:08","(Valid)SchubertN06M09:14"],"patternID":"PG8","sizeExpanded":4},{"definition":[1,{"contents":"PG7","tag":"Var"},{"contents":"PG9","tag":"Var"}],"dependenciesDirect":["PG7","PG9"],"dependents":[],"globalFreq":2,"occuranceInCorpus":["(Valid)MozartK545:2M01:08","(Valid)SchumannN06M02:07"],"patternID":"PG80","sizeExpanded":7},{"definition":[1,{"contents":"PG4","tag":"Var"},{"contents":"PG23","tag":"Var"}],"dependenciesDirect":["PG23","PG4"],"dependents":[],"globalFreq":2,"occuranceInCorpus":["(Valid)MozartK545:2M01:08","(Valid)SchubertN14M05:08"],"patternID":"PG81","sizeExpanded":7},{"definition":[1,{"contents":"PG39","tag":"Var"},{"contents":{"tag":"Split"},"tag":"Constant"}],"dependenciesDirect":["PG39"],"dependents":[],"globalFreq":2,"occuranceInCorpus":["(Valid)MozartK310:2M01:04","(Valid)MozartK332:2M01:04"],"patternID":"PG82","sizeExpanded":9},{"definition":[1,{"contents":"PG3","tag":"Var"},{"contents":"PG19","tag":"Var"}],"dependenciesDirect":["PG19","PG3"],"dependents":[],"globalFreq":2,"occuranceInCorpus":["(Valid)SchubertN05M09:12","(Valid)SchumannN03M10:15"],"patternID":"PG83","sizeExpanded":7},{"definition":[1,{"contents":"PG3","tag":"Var"},{"contents":"PG10","tag":"Var"}],"dependenciesDirect":["PG10","PG3"],"dependents":[],"globalFreq":2,"occuranceInCorpus":["(Valid)MozartK282:1M05:08","(Valid)SchubertN09M05:08"],"patternID":"PG84","sizeExpanded":7},{"definition":[1,{"contents":"PG12","tag":"Var"},{"contents":"PG7","tag":"Var"}],"dependenciesDirect":["PG12","PG7"],"dependents":[],"globalFreq":2,"occuranceInCorpus":["(Valid)MozartK282:1M01:04","(Valid)SchubertN09M09:14"],"patternID":"PG85","sizeExpanded":8},{"definition":[1,{"contents":"PG12","tag":"Var"},{"contents":"PG4","tag":"Var"}],"dependenciesDirect":["PG12","PG4"],"dependents":[],"globalFreq":2,"occuranceInCorpus":["(Valid)MozartK545:2M01:08","(Valid)MozartK570:2M01:04"],"patternID":"PG86","sizeExpanded":8},{"definition":[1,{"contents":"PG12","tag":"Var"},{"contents":"PG19","tag":"Var"}],"dependenciesDirect":["PG12","PG19"],"dependents":[],"globalFreq":2,"occuranceInCorpus":["(Valid)MozartK282:1M05:08","(Valid)SchubertN08M11:20"],"patternID":"PG87","sizeExpanded":11},{"definition":[1,{"contents":{"tag":"Split"},"tag":"Constant"},{"contents":"PG67","tag":"Var"}],"dependenciesDirect":["PG67"],"dependents":[],"globalFreq":2,"occuranceInCorpus":["(Valid)SchubertN13M10:25","(Valid)SchumannN06M02:07"],"patternID":"PG88","sizeExpanded":11},{"definition":[1,{"contents":"PG6","tag":"Var"},{"contents":[{"contents":{"tag":"Split"},"tag":"Constant"},["RG1",[{"contents":{"tag":"Terminate"},"tag":"Constant"}]]],"tag":"With"}],"dependenciesDirect":["PG6"],"dependents":["PG25","PG52","PG80"],"globalFreq":4,"occuranceInCorpus":["(Valid)MozartK282:1M05:08","(Valid)MozartK310:2M01:04","(Valid)MozartK545:2M01:08","(Valid)SchumannN06M02:07"],"patternID":"PG9","sizeExpanded":5}];
+
+        // Process the data
+        (function () {
+            // Calculate histogram dimensions
+            const histogramHeight = height * 0.15; // 15% of the main plot height
+            const histogramMargin = 0; // Space between main plot and histograms
+            
+            // Create scales
+            const x = d3.scaleLinear()
+                .domain([0, d3.max(data, d => d.globalFreq)])
+                .range([0, width]);
+             
+            
+
+            const y = d3.scaleLinear()
+                .domain([0, d3.max(data, d => d.sizeExpanded)])
+                .range([height, 0]);
+              
+                
+            // Generate tick values to ensure consistency between plots and histograms
+            const xTicks = x.ticks(15);
+            const yTicks = y.ticks(15);
+
+            // Adjust font size based on screen width - increasing sizes to match BarPlot
+            const fontSize = width < 500 ? "12px" : "16px";
+            const titleFontSize = width < 500 ? "18px" : "22px";
+            const axisTitleSize = width < 500 ? "14px" : "18px";
+            const histogramLabelSize = width < 500 ? "10px" : "12px";
+
+            // Add X axis
+            svg.append("g")
+                .attr("transform", `translate(0,${height})`)
+                .call(d3.axisBottom(x)
+                    .tickValues(xTicks)
+                    .tickSize(-5) // Negative value for inward ticks
+                )
+                .selectAll("text")
+                .style("font-size", fontSize)
+                .attr("y", 0) // Move text down away from the axis
+                .attr("dy", "-0.71em"); // Standard adjustment for readability
+
+            // Add X axis label
+            svg.append("text")
+                .attr("x", width / 2)
+                .attr("y", height + histogramHeight + (width < 500 ? 50 : 70)) // Adjusted to accommodate histogram
+                .attr("text-anchor", "middle")
+                .attr("fill", "black")
+                .style("font-size", axisTitleSize)
+                .text("frequency");
+
+            // Add Y axis
+            svg.append("g")
+                .call(d3.axisLeft(y)
+                    .tickValues(yTicks)
+                    .tickSize(-5) // Negative value for inward ticks
+                )
+                .selectAll("text")
+                .style("font-size", fontSize)
+                .attr("x", 10) // Move text left away from the axis
+                .attr("dx", "1em"); // Standard adjustment for readability
+
+            // Add Y axis label
+            svg.append("text")
+                .attr("transform", "rotate(-90)")
+                .attr("y", -(histogramHeight + margin.left) + (width < 500 ? 15 : 25)) // Adjusted to accommodate histogram
+                .attr("x", -height / 2)
+                .attr("text-anchor", "middle")
+                .attr("fill", "black")
+                .style("font-size", axisTitleSize)
+                .text("size");
+
+            // Create X-axis histogram
+            const xHistogram = d3.histogram()
+                .value(d => d.globalFreq)
+                .domain(x.domain())
+                .thresholds(xTicks); // Use the same tick values as the main x-axis
+
+            const xBins = xHistogram(data);
+            
+            // Determine y-scale for X histogram
+            const xHistY = d3.scaleLinear()
+                .domain([0, d3.max(xBins, d => d.length)])
+                .range([0, histogramHeight]); // For downward bars
+                
+            // Create X histogram container
+            const xHistGroup = svg.append("g")
+                .attr("transform", `translate(0, ${height + histogramMargin/2})`);
+            
+            // Draw X histogram bars - now facing downward
+            const xHistBars = xHistGroup.selectAll("rect")
+                .data(xBins)
+                .join("rect")
+                .attr("class", "histogram-bar")
+                .attr("x", d => x(d.x0))
+                .attr("width", d => Math.max(0, x(d.x1) - x(d.x0) - 1))
+                .attr("y", 0) // Start at 0 to go downward
+                .attr("height", d => xHistY(d.length));
+            
+            // Add frequency numbers to bars (for bars with enough width and non-zero frequency)
+            xHistGroup.selectAll("text")
+                .data(xBins)
+                .join("text")
+                .filter(d => d.length > 0 && (x(d.x1) - x(d.x0)) > 15) // Only add text to bars with enough width
+                .attr("x", d => x(d.x0) + (x(d.x1) - x(d.x0)) / 2)
+                .attr("y", d => xHistY(d.length) / 2 + 5) // Position in middle of bar
+                .attr("text-anchor", "middle")
+                .attr("fill", "#333")
+                .style("font-size", histogramLabelSize)
+                .text(d => d.length);
+                
+            // Create Y-axis histogram
+            const yHistogram = d3.histogram()
+                .value(d => d.sizeExpanded)
+                .domain(y.domain())
+                .thresholds(yTicks); // Use the same tick values as the main y-axis
+
+            const yBins = yHistogram(data);
+            
+            // Determine x-scale for Y histogram
+            const yHistX = d3.scaleLinear()
+                .domain([0, d3.max(yBins, d => d.length)])
+                .range([0, histogramHeight]); // Scale for leftward bars
+                
+            // Create Y histogram container - position at the left of the y-axis
+            const yHistGroup = svg.append("g")
+                .attr("transform", `translate(${-histogramMargin/2}, 0)`);
+                
+            // Draw Y histogram bars (horizontal) - facing left and aligning with y-axis
+            const yHistBars = yHistGroup.selectAll("rect")
+                .data(yBins)
+                .join("rect")
+                .attr("class", "histogram-bar")
+                .attr("x", d => -yHistX(d.length)) // Start at 0 and extend leftward
+                .attr("width", d => yHistX(d.length))
+                .attr("y", d => y(d.x1)) // Align with the y-axis values
+                .attr("height", d => Math.max(0, y(d.x0) - y(d.x1) - 1));
+                
+            // Add frequency numbers to bars (for bars with enough height and non-zero frequency)
+            yHistGroup.selectAll(".hist-label")
+                .data(yBins)
+                .join("text")
+                .attr("class", "hist-label")
+                .filter(d => d.length > 0 && (y(d.x0) - y(d.x1)) > 15) // Only add text to bars with enough height
+                .attr("x", d => -yHistX(d.length) / 2) // Position in middle of bar
+                .attr("y", d => y(d.x1) + (y(d.x0) - y(d.x1)) / 2 + 5) // Vertically center in bar
+                .attr("text-anchor", "middle")
+                .attr("fill", "#333")
+                .style("font-size", histogramLabelSize)
+                .text(d => d.length);
+
+            // Add dots
+            const tooltipContent = d => 
+                                    `${d.patternID}<br>
+                                    frequency: ${d.globalFreq} <br>
+                                    size: ${d.sizeExpanded}`;
+              
+            svg.selectAll("circle")
+                .data(data)
+                .join("circle")
+                .attr("cx", d => x(d.globalFreq + Math.random() * 0.1 ))
+                .attr("cy", d => y(d.sizeExpanded + Math.random() * 0.1 ))
+                .attr("r", width < 500 ? 4 : 6)
+                .style("fill", "grey")
+                .style("opacity", 0.7)
+                .on("mouseover", function (event, d) {
+                    d3.select(this)
+                        .style("fill", "#69b3a2")
+                        .attr("r", width < 500 ? 5 : 7);
+
+                    tooltip.transition()
+                        .duration(200)
+                        .style("opacity", .9);
+
+                    
+                    
+                    // Calculate tooltip position relative to the visualization container
+                    const containerRect = document.getElementById('scatter-plot').getBoundingClientRect();
+                    const tooltipX = event.pageX  + 10;
+                    const tooltipY = event.pageY - 28;
+                    
+                    tooltip.html(tooltipContent(d))
+                        .style("left", tooltipX + "px")
+                        .style("top", tooltipY + "px");
+                })
+                .on("mouseout", function () {
+                    d3.select(this)
+                        .style("fill", "grey")
+                        .attr("r", width < 500 ? 4 : 6);
+
+                    tooltip.transition()
+                        .duration(500)
+                        .style("opacity", 0);
+                })
+                .on("touchstart", function (event, d) {
+                    event.preventDefault();
+                    d3.select(this)
+                        .style("fill", "#69b3a2")
+                        .attr("r", width < 500 ? 5 : 7);
+
+                    tooltip.transition()
+                        .duration(200)
+                        .style("opacity", .9);
+
+                    
+                   
+
+                    // Calculate tooltip position relative to the visualization container for touch events
+                    const containerRect = document.getElementById('scatter-plot').getBoundingClientRect();
+                    const tooltipX = event.touches[0].pageX - containerRect.left + 10;
+                    const tooltipY = event.touches[0].pageY - containerRect.top - 28;
+                    
+                    tooltip.html(tooltipContent(d))
+                        .style("left", tooltipX + "px")
+                        .style("top", tooltipY + "px");
+                })
+                .on("touchend", function () {
+                    d3.select(this)
+                        .style("fill", "grey")
+                        .attr("r", width < 500 ? 4 : 6);
+
+                    tooltip.transition()
+                        .duration(500)
+                        .style("opacity", 0);
+                });
+
+            const xExtent = d3.max(data, d => d.globalFreq)
+            const yExtent = d3.max(data, d => d.sizeExpanded)
+            const minExtent = Math.min(xExtent, yExtent)
+            const oneToOne = [{ x: 0, y: 0 }, { x: minExtent, y: minExtent }];
+            const line = d3.line()
+                .x(d => x(d.x))
+                .y(d => y(d.y));
+            svg.append("path")
+                .attr("fill", "none")
+                .attr("stroke", "black")
+                .attr("stroke-width", 1)
+                .attr("d", line(oneToOne));
+
+            // Add title
+            svg.append("text")
+                .attr("x", width / 2)
+                .attr("y", -30)
+                .attr("text-anchor", "middle")
+                .style("font-size", titleFontSize)
+                .text("Frequency vs Size (Rhythm)");
+        })();
+
+        // Handle window resize
+        window.addEventListener('resize', function () {
+            // For a complete solution, we would redraw the chart
+            // This is simplified to avoid complexity
+        });
+    </script>
+</body>
+
+</html>

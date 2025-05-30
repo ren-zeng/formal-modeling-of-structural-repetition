@@ -57,8 +57,8 @@ mkScatterConfigFreqSize x path = do
             , dataSet = json
             , xLabel = "frequency"
             , yLabel = "size"
-            , _X = "frequency"
-            , _Y = "size"
+            , _X = "globalFreq"
+            , _Y = "sizeExpanded"
             , _hoverInfo = "patternID"
             }
 
@@ -91,7 +91,7 @@ main = do
     readPlotScatter mkScatterConfigFreqSize 
         "Frequency vs Size (Harmony)"
         "Experiment/Result/Harmony/patternInfo.json"
-        "Experiment/Result/Harmony/patternFreqSize(Rhythm).html"
+        "Experiment/Result/Harmony/patternFreqSize(Harmony).html"
 
     readPlotScatter mkScatterConfigFreqSize 
         "Frequency vs Size (Rhythm)"

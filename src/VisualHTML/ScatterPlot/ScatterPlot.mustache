@@ -217,10 +217,13 @@
             const x = d3.scaleLinear()
                 .domain([0, d3.max(data, d => d.{{_X}})])
                 .range([0, width]);
+             
+            
 
             const y = d3.scaleLinear()
                 .domain([0, d3.max(data, d => d.{{_Y}})])
                 .range([height, 0]);
+              
                 
             // Generate tick values to ensure consistency between plots and histograms
             const xTicks = x.ticks(15);
@@ -354,11 +357,16 @@
                 .text(d => d.length);
 
             // Add dots
+            const tooltipContent = d => 
+                                    `${d.{{_hoverInfo}}}<br>
+                                    {{xLabel}}: ${d.{{_X}}} <br>
+                                    {{yLabel}}: ${d.{{_Y}}}`;
+              
             svg.selectAll("circle")
                 .data(data)
                 .join("circle")
-                .attr("cx", d => x(d.{{_X}} + Math.random() * 0.5 ))
-                .attr("cy", d => y(d.{{_Y}} + Math.random() * 0.5 ))
+                .attr("cx", d => x(d.{{_X}} + Math.random() * 0.1 ))
+                .attr("cy", d => y(d.{{_Y}} + Math.random() * 0.1 ))
                 .attr("r", width < 500 ? 4 : 6)
                 .style("fill", "grey")
                 .style("opacity", 0.7)
@@ -371,16 +379,14 @@
                         .duration(200)
                         .style("opacity", .9);
 
-                    let tooltipContent = d.{{_hoverInfo}} ?
-                        `${d.{{_hoverInfo}}}<br>${d.{{_X}}} → ${d.{{_Y}}}` :
-                        `${d.{{_X}}} → ${d.{{_Y}}}`;
+                    
                     
                     // Calculate tooltip position relative to the visualization container
                     const containerRect = document.getElementById('scatter-plot').getBoundingClientRect();
                     const tooltipX = event.pageX  + 10;
                     const tooltipY = event.pageY - 28;
                     
-                    tooltip.html(tooltipContent)
+                    tooltip.html(tooltipContent(d))
                         .style("left", tooltipX + "px")
                         .style("top", tooltipY + "px");
                 })
@@ -403,16 +409,15 @@
                         .duration(200)
                         .style("opacity", .9);
 
-                    let tooltipContent = d.{{_hoverInfo}} ?
-                        `${d.{{_hoverInfo}}}<br>${d.{{_X}}} → ${d.{{_Y}}}` :
-                        `${d.{{_X}}} → ${d.{{_Y}}}`;
+                    
+                   
 
                     // Calculate tooltip position relative to the visualization container for touch events
                     const containerRect = document.getElementById('scatter-plot').getBoundingClientRect();
                     const tooltipX = event.touches[0].pageX - containerRect.left + 10;
                     const tooltipY = event.touches[0].pageY - containerRect.top - 28;
                     
-                    tooltip.html(tooltipContent)
+                    tooltip.html(tooltipContent(d))
                         .style("left", tooltipX + "px")
                         .style("top", tooltipY + "px");
                 })
