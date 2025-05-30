@@ -9690,12 +9690,12 @@
                                             "label": "[0:1/4:-1/16]",
                                             "children": [
                                                 {
-                                                    "label": "[0:1/8:1/16]",
+                                                    "label": "G4:1/8",
+                                                    "children": []
+                                                },
+                                                {
+                                                    "label": "[0:1/8:-1/16]",
                                                     "children": [
-                                                        {
-                                                            "label": "G4:1/8",
-                                                            "children": []
-                                                        },
                                                         {
                                                             "label": "r:1/16",
                                                             "children": []
