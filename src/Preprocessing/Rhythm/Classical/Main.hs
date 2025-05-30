@@ -59,7 +59,7 @@ plotCorrection path p = do
 
 reportPreprocessing :: FilePath -> FilePath -> IO ()
 reportPreprocessing datasetPath outPath = do
-    pieces <- load datasetPath
+    (errors,pieces) <- load datasetPath
     let folderNames = ["DecodedParseTree", "CorrectionParseTree", "ProofTrees"]
     forM_ folderNames (\x -> createDirectoryIfMissing False $ outPath <> "/" <> x)
     mapM_ (plotDecodedJSON outPath) pieces

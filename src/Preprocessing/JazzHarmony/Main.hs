@@ -10,11 +10,12 @@ import Preprocessing.Preprocess
 getParseTree :: Piece -> ParseTree (Maybe RuleNames) ChordLabel ChordLabel
 getParseTree = inferRuleTree inferRule . getSymbolTree
 
-load :: FilePath -> IO [Piece]
+load :: FilePath -> IO ([String],[Piece])
 load path = do
     Just r <- decodeTreeBank path
     let ps = [p | Success p <- r]
-    return ps
+    let errors = [e | Error e <- r]
+    return (errors,ps)
 
 main :: IO ()
 main =

@@ -104,7 +104,7 @@ parseInteger (String x) = do
     let mN = readMaybe $ unpack x
     case mN of
         Just n -> parseJSON (Number n)
-        Nothing -> empty -- error $ printf "read fail on %s" (show $ unpack x)
+        Nothing -> fail $  "fail on parseInteger: " <>  (unpack x)
 parseInteger _ = empty
 
 parseRational :: Value -> Parser Rational
@@ -116,7 +116,7 @@ parseRational (String x) = case splitOn "/" x of
         pInt <- parseInteger (String p)
         qInt <- parseInteger (String q)
         return $ pInt % qInt
-    _ -> empty
+    _ -> fail $ "Rational must be in the form of n or n/m, instead got " <> show x
 
 -- >>> parse parseRational "2/31"
 -- Success (2 % 31)
@@ -129,7 +129,7 @@ parseRhythmT (String x) = do
             let (String pitch) = a
             dur <- parseRational b
             return (unpack pitch, dur)
-        _ -> empty
+        _ -> fail $ "T must be in the form of a:b where a is a pitch and b is a rational, instead got " <> show xs
 
 parseRhythmNT :: Value -> Parser (Rational, Rational, Rational)
 parseRhythmNT (String x) = do
@@ -137,7 +137,7 @@ parseRhythmNT (String x) = do
     rs <- mapM parseRational xs
     case rs of
         [a, b, c] -> return (a, b, c)
-        _ -> empty
+        _ -> fail $ "NT must be in the form of [a:b:c] where a, b, c are rationals, instead got " <> show rs
   where
     removebracket = Text.init . Text.tail
 -- unpack3 [a,b,c] = (a,b,c)
@@ -159,11 +159,13 @@ parseRhythmTree = decode
 -- >>> parseRhythmTree "{\"label\":\"[0:1/8:0]\",\"children\":[{\"label\":\"F3:2/3\",\"children\":[]},{\"label\":\"G5:6/3\",\"children\":[]}]}"
 -- Just (RhythmNode (0 % 1) (1 % 8) (0 % 1) [RhythmLeaf "F3" (2 % 3),RhythmLeaf "G5" (2 % 1)])
 
-load :: FilePath -> IO [Piece]
+load :: FilePath -> IO ([String],[Piece])
 load path = do
     Just (xs :: Array) <- decodeFileStrict path
-    let results = fmap (parse (parseJSON @Piece)) (toList xs)
-    return $ [x | Success x <- results]
+    let results =  parse (parseJSON @Piece) <$> toList xs
+    let errors = [e | Error e <- results]
+    let successes = [s | Success s <- results]
+    return  (errors,successes)
 
 drawRhythmTree :: RhythmTree -> Diagram BackEnd
 drawRhythmTree t = Diagram.bg white $ treeDiagram Prelude.id $ drawText . show <$> rhythmTreeToTree t

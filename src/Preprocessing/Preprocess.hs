@@ -126,10 +126,11 @@ data Categorized a b = Categorized
 instance (ToJSON a, ToJSON b) => ToJSON (Categorized a b)
 instance (FromJSON a, FromJSON b) => FromJSON (Categorized a b)
 
-preprocess :: (_) => IO [a] -> (r -> r') -> (a -> ParseTree (Maybe r) nt t) -> (a -> k) -> FilePath -> IO ()
+preprocess :: (_) => IO ([e],[a]) -> (r -> r') -> (a -> ParseTree (Maybe r) nt t) -> (a -> k) -> FilePath -> IO ()
 preprocess load ruleCategory getParseTree getPieceName outDir = do
-    ps <- load
+    (errors,ps) <- load
     let xs = fmap (titleWithParseTree getParseTree getPieceName) ps
+    encodeFile (outDir <> "/TreeBankLoadingErrors.json") errors
     encodeFile (outDir <> "/ParseTrees.json") xs
     encodeFile (outDir <> "/ParseTreeReport.json") $
         ParseTreeReport
