@@ -5,7 +5,7 @@ import Data.Aeson.Types
 import Grammar.JazzHarmony.JazzGrammar
 import Grammar.JazzHarmony.MusicTheory
 import Preprocessing.JazzHarmony.TreeBankLoader
-import Preprocessing.Preprocess
+import Preprocessing.Preprocess hiding (ruleCategory)
 
 getParseTree :: Piece -> ParseTree (Maybe RuleNames) ChordLabel ChordLabel
 getParseTree = inferRuleTree inferRule . getSymbolTree

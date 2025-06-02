@@ -8,6 +8,7 @@ import Core.SymbolTree
 import Control.Concurrent.Async (mapConcurrently_)
 import Data.Aeson
 import Data.Functor.Foldable
+import Data.List (nub)
 import Data.Map (Map)
 import qualified Data.Map as Map
 import Data.Maybe
@@ -15,6 +16,7 @@ import Data.Tree
 import Diagrams hiding (Result)
 import Diagrams.Backend.SVG
 import Diagrams.Prelude hiding (Result)
+import Experiment.TismirExperiment (getRuleDepth)
 import GHC.Generics
 import qualified Grammar.JazzHarmony.MusicTheory as MusicTheory
 import qualified Preprocessing.JazzHarmony.TreeBankLoader as JHTB
@@ -126,10 +128,41 @@ data Categorized a b = Categorized
 instance (ToJSON a, ToJSON b) => ToJSON (Categorized a b)
 instance (FromJSON a, FromJSON b) => FromJSON (Categorized a b)
 
-preprocess :: (_) => IO ([e],[a]) -> (r -> r') -> (a -> ParseTree (Maybe r) nt t) -> (a -> k) -> FilePath -> IO ()
+data RuleInfo r' = RuleInfo
+    { ruleName :: String
+    , ruleCategory :: r'
+    , occurancesInCorpus :: Int
+    , ruleDepths :: [Double]
+    }
+    deriving (Generic, Show)
+instance (ToJSON r') => ToJSON (RuleInfo r')
+instance (FromJSON r') => FromJSON (RuleInfo r')
+
+corpusRuleInfo ::
+    (_) =>
+    (r -> r') ->
+    [ParseTree (Maybe r) nt t] ->
+    [RuleInfo  (Maybe r')]
+corpusRuleInfo ruleCat ts =
+    ( \x ->
+        RuleInfo
+            { ruleName = show $ pretty x
+            , ruleCategory = ruleCat <$> x
+            , occurancesInCorpus = occurance Map.! x
+            , ruleDepths = ruleDepth Map.! x
+            }
+    )
+        <$> nub (foldMap getAllRules ts)
+  where
+    ruleDepth = Map.unionsWith (++) $ getRuleDepth <$> ruleTrees
+    occurance = fmap length ruleDepth
+    Just ruleTrees = mapM parseTreeToRuleTree ts
+
+preprocess :: (_) => IO ([e], [a]) -> (r -> r') -> (a -> ParseTree (Maybe r) nt t) -> (a -> k) -> FilePath -> IO ()
 preprocess load ruleCategory getParseTree getPieceName outDir = do
-    (errors,ps) <- load
+    (errors, ps) <- load
     let xs = fmap (titleWithParseTree getParseTree getPieceName) ps
+
     encodeFile (outDir <> "/TreeBankLoadingErrors.json") errors
     encodeFile (outDir <> "/ParseTrees.json") xs
     encodeFile (outDir <> "/ParseTreeReport.json") $
@@ -140,16 +173,19 @@ preprocess load ruleCategory getParseTree getPieceName outDir = do
                     filter (not . withoutCatchAll . snd) xs
             }
 
-    encodeFile (outDir <> "/RuleDistribution.json") $
-        toCounts . Map.mapKeys (show . pretty) . histogram $
-            foldMap (getAllRules . snd) xs
+    encodeFile (outDir <> "/RuleInfo.json") $
+        corpusRuleInfo ruleCategory (fmap snd xs)
 
-    encodeFile (outDir <> "/RuleDistributionCategory.json")
-        $ toCounts
-            . Map.mapKeys
-                (fmap $ \x -> Categorized (show $ pretty x) (ruleCategory x))
-            . histogram
-        $ foldMap (getAllRules . snd) xs
+    -- encodeFile (outDir <> "/RuleDistribution.json") $
+    --     toCounts . Map.mapKeys (show . pretty) . histogram $
+    --         foldMap (getAllRules . snd) xs
+
+    -- encodeFile (outDir <> "/RuleDistributionCategory.json")
+    --     $ toCounts
+    --         . Map.mapKeys
+    --             (fmap $ \x -> Categorized (show $ pretty x) (ruleCategory x))
+    --         . histogram
+    --     $ foldMap (getAllRules . snd) xs
 
     let parseTreeDir = outDir <> "/InferedParseTrees"
     let svgFolder = parseTreeDir <> "/svg"

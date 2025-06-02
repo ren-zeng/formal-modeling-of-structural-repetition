@@ -1,4 +1,4 @@
-# Rule distribution (bar plot)
+# [DONE] Rule distribution (bar plot)
 
    1. show also abstracted rules
       1. Prolongational
@@ -18,24 +18,24 @@
       1. y axis - abstract rule category
       2. x axis - frequency
 
-# compression scatter plot 
+# [DONE] compression scatter plot 
 1. add projected distribution on both axes
 2. the distribution of compression rate in a seperate plot
-3. each point add a number represents the average pattern occurance depth (if A contains B, only consider A)
+
 
 TODO: 
-# pattern frequency-size scatter plot
-
+# [DONE]  pattern frequency-size scatter plot
+1. each point add a number represents the average pattern occurance depth (if A contains B, only consider A)
 
 # plot rule distribution againt tree depth where they occur (0-1) 
 1. "1" represents max depth of a tree
 2. stacked histogram against depth (0-1) (each large bar has the same height and width but different partitions)
 
-# pattern dependency plot 
+# [InProgress] pattern dependency plot 
 1. group patterns based on their imports so that the cables are more managed.
 2. for each pattern, show the average depth (0-1) by a bar pointed outward.
 
-# pattern citation "impact" (entropy, freq)
+# [Done] pattern citation "impact" (entropy, freq)
 - rank pattern `p` based summing (freq,rank) of the dependents of `p` 
     - Goal: increase with freq and entropy of citation (linear or quadratic)
     - Solution: 

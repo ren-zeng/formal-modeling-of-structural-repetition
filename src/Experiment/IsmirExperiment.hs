@@ -107,7 +107,7 @@ type PatternID = String
 data PatternInfo r k = PatternInfo {
     patternID :: PatternID,
     definition :: Pattern (Abstraction r) , 
-    dependents :: Set PatternID,
+    dependentsDirect :: Set PatternID,
     dependenciesDirect :: Set PatternID,
     globalFreq :: Int,
     sizeExpanded :: Int,
@@ -124,13 +124,13 @@ mkPatternInfo :: _ => SLFP r k -> PatternID -> PatternInfo r k
 mkPatternInfo slfp pId = PatternInfo {
     patternID = pId,
     definition = globalPatterns slfp Map.! pId,
-    dependents = patternDependents slfp pId,
+    dependentsDirect = directDependents slfp pId,
     dependenciesDirect = directDependencies slfp pId,
-    globalFreq = patternGlobalFreq slfp pId,
+    globalFreq = patternFreqInCorpus slfp Map.! pId,
     sizeExpanded = patternSizeExpanded slfp pId,
     occuranceInCorpus = patternOccuranceG slfp pId,
     depths = patternDepthInCorpus slfp Map.! pId,
-    impact = patternImpact (patternGlobalFreq slfp) (Set.toList . directDependents slfp) pId
+    impact = patternImpact (patternFreqInCorpus slfp Map.!) (Set.toList . directDependents slfp) pId
     }
 
 

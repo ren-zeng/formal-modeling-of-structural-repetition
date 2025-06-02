@@ -35,8 +35,8 @@ configRuleReport plotName dataPath = do
         , dataSet = json
         , xLabel = "Rule Name"
         , yLabel = "Frequency"
-        , _X = "feature"
-        , _Y = "frequency"
+        , _X = "ruleName"
+        , _Y = "occurancesInCorpus"
         , _hoverInfo = ""
         }
 
@@ -46,7 +46,7 @@ plotBarPlot = mkHTML "src/VisualHTML/BarPlot/BarPlot.mustache"
 main = do
     rhythmConfig <- configRuleReport
         "Classical Rhythm Rule Distribution"
-        "Experiment/DataSet/Rhythm/Classical/RuleDistribution.json"
+        "Experiment/DataSet/Rhythm/Classical/RuleInfo.json"
     plotBarPlot
         rhythmConfig
         "Experiment/DataSet/Rhythm/Classical/RuleDistribution.html"
@@ -54,7 +54,7 @@ main = do
     
     harmonyConfig <- configRuleReport 
         "Jazz Harmony Rule Distribution"
-        "Experiment/DataSet/Harmony/RuleDistribution.json"
+        "Experiment/DataSet/Harmony/RuleInfo.json"
     plotBarPlot
         harmonyConfig
         "Experiment/DataSet/Harmony/RuleDistribution.html"

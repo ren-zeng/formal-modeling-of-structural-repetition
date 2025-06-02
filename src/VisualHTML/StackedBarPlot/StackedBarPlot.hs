@@ -28,20 +28,7 @@ instance ToMustache StackedBarPlotConfig where
             , "_C" ~> _C x
             ]
 
--- Helper function to create a standard config for rule distribution reports
--- The JSON data is expected to have feature, frequency, and category fields
-configCategorizedRuleReport :: String -> FilePath -> IO StackedBarPlotConfig
-configCategorizedRuleReport plotName dataPath = do 
-    json <- TIO.readFile dataPath
-    return $ StackedBarPlotConfig
-        { figureName = plotName
-        , dataSet = json
-        , xLabel = "Rule Name"
-        , yLabel = "Frequency"
-        , _X = "feature"
-        , _Y = "frequency"
-        , _C = "category"
-        }
+
 
 -- Function to create a custom stacked bar plot configuration
 createStackedBarPlotConfig :: String -> FilePath  -> IO StackedBarPlotConfig
@@ -52,9 +39,9 @@ createStackedBarPlotConfig plotName dataPath  = do
         , dataSet = json
         , xLabel = "Rule Category"
         , yLabel = "Frequency"
-        , _X = "feature.content"
-        , _Y = "frequency"
-        , _C = "feature.category"
+        , _X = "ruleName"
+        , _Y = "occurancesInCorpus"
+        , _C = "ruleCategory"
         }
 
 -- Main function to generate the stacked bar plot HTML file
@@ -69,20 +56,19 @@ plotStackedBarPlot = mkHTML "src/VisualHTML/StackedBarPlot/StackedBarPlot.mustac
 -- For example: [{"feature": "Rule1", "frequency": 10, "category": "group1"}, ...]
 exampleMain :: IO ()
 exampleMain = do
-    rhythmConfig <- configCategorizedRuleReport
+    rhythmConfig <- createStackedBarPlotConfig
         "Classical Rhythm Rule Distribution (Stacked)"
-        "Experiment/DataSet/Rhythm/Classical/StackedRuleDistribution.json"
+        "Experiment/DataSet/Rhythm/Classical/RuleInfo.json"
     plotStackedBarPlot
         rhythmConfig
         "Experiment/DataSet/Rhythm/Classical/StackedRuleDistribution.html"
     
-    harmonyConfig <- configCategorizedRuleReport 
+    harmonyConfig <- createStackedBarPlotConfig 
         "Jazz Harmony Rule Distribution (Stacked)"
-        "Experiment/DataSet/Harmony/RuleDistributionCategory.json"
+        "Experiment/DataSet/Harmony/RuleInfo.json"
     plotStackedBarPlot
         harmonyConfig
         "Experiment/DataSet/Harmony/StackedRuleDistribution.html"
 
 -- >>> exampleMain
--- Experiment/DataSet/Rhythm/Classical/StackedRuleDistribution.json: openFile: does not exist (No such file or directory)
 

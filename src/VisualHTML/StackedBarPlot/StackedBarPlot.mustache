@@ -83,9 +83,14 @@
             cursor: pointer;
         }
         .legend-rect.highlighted {
-            
             stroke-width: 1px;
             stroke: #000;
+        }
+        .legend-container {
+            max-height: 300px;
+            overflow-y: auto;
+            border: 1px solid #eee;
+            padding-right: 10px;
         }
     </style>
 </head>
@@ -122,10 +127,9 @@
 
     // Transform the data for stacking
     const transformedData = rawData.map(item => ({
-        {{_X}}: item.feature.content,
-        {{_C}}: item.feature.category,
-        {{_Y}}: item.frequency,
-        category: item.feature.category // Category for stacking
+        {{_X}}: item.{{_X}},
+        {{_C}}: item.{{_C}},
+        {{_Y}}: item.{{_Y}}
     }));
     
     // Process by category first
@@ -218,8 +222,9 @@
         .range(d3.schemeCategory10);
         
     // Color scale for features (with a different palette)
+    const allUniqueFeatures = [...new Set(transformedData.map(d => d.{{_X}}))];
     const colorFeature = d3.scaleOrdinal()
-        .domain(transformedData.map(d => d.{{_X}}))
+        .domain(allUniqueFeatures)
         .range(d3.schemeSet3);
 
     // Draw category bars (background)
@@ -252,9 +257,12 @@
             // Calculate the width of this feature bar
             const barWidth = x(feature.frequency);
             
+            // Create safe feature name for CSS class
+            const safeFeatureName = (feature.feature || "").toString().replace(/\s+/g, '-');
+            
             // Only add feature bars with sufficient width
             const featureBar = catGroup.append("rect")
-                .attr("class", `feature-bar feature-${feature.feature.replace(/\s+/g, '-')}`)
+                .attr("class", `feature-bar feature-${safeFeatureName}`)
                 .attr("data-category", cat.category)
                 .attr("data-feature", feature.feature)
                 .attr("x", xPosition)
@@ -348,25 +356,57 @@
         .text(d => d);
         
     // Extract all unique features for the legend instead of just top N
-    const allFeatures = Array.from(
-        new Set(
-            categoryData.flatMap(cat => 
-                cat.features
-                .map(f => f.feature)
-            )
-        )
+    // First collect all features from all categories with their frequencies
+    const allFeaturesWithFreq = categoryData.flatMap(cat => 
+        cat.features.map(f => ({
+            feature: f.feature,
+            frequency: f.frequency
+        }))
     );
     
+    // Remove duplicates by creating a Map with feature as key and keeping highest frequency
+    const featureFreqMap = new Map();
+    allFeaturesWithFreq.forEach(item => {
+        if (!featureFreqMap.has(item.feature) || 
+            featureFreqMap.get(item.feature).frequency < item.frequency) {
+            featureFreqMap.set(item.feature, item);
+        }
+    });
+    
+    // Convert back to array and sort by frequency (descending) to match bar plot appearance
+    const allFeaturesSorted = Array.from(featureFreqMap.values())
+        .sort((a, b) => b.frequency - a.frequency)
+        .map(item => item.feature);
+    
+    // Calculate dynamic SVG height based on content
+    const chartHeight = height + margin.top + margin.bottom;
+    const legendHeight = Math.max(500, (categories.length + allFeaturesSorted.length + 3) * 20); // Reasonable height limit
+    const svgHeight = Math.max(chartHeight, legendHeight);
+    
+    // Update SVG height to accommodate all legends
+    d3.select("#myPlot svg").attr("height", svgHeight);
+    
+    // Create a container for the feature legend
+    const featureLegendContainer = svg.append("g")
+        .attr("class", "feature-legend-container")
+        .attr("transform", `translate(${width + 20}, ${(categories.length + 2) * 20})`);
+
+    // Add title for feature legend
+    featureLegendContainer.append("text")
+        .attr("class", "legend-title")
+        .attr("y", -10)
+        .attr("font-weight", "bold")
+        .attr("font-size", "12px") // Match category font size
+        .text("Features");
+    
     // Add legend for features
-    const featureLegend = svg.append("g")
-        .attr("font-size", "12px")
-        .attr("text-anchor", "start")
-        .selectAll(".feature-legend")
-        .data(allFeatures)
+    const featureLegend = featureLegendContainer.selectAll(".feature-legend")
+        .data(allFeaturesSorted)
         .enter().append("g")
         .attr("class", "feature-legend-item")
         .attr("data-feature", d => d)
-        .attr("transform", (d, i) => `translate(${width + 20}, ${(categories.length + 2 + i) * 20})`)
+        .attr("transform", (d, i) => `translate(0, ${i * 20})`)
+        .attr("font-size", "12px") // Match category font size
         .on("mouseenter", function(event, feature) {
             // Highlight the legend item
             d3.select(this).select("rect")
@@ -405,6 +445,11 @@
         .attr("class", "legend-text")
         .attr("x", 20)
         .attr("y", 10)
+        .text(d => {
+            // Truncate long feature names for display
+            return d && d.length > 25 ? d.substring(0, 22) + "..." : d;
+        })
+        .append("title") // Add full text as tooltip for truncated names
         .text(d => d);
         
     // Functions to save the visualization

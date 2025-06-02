@@ -13,12 +13,15 @@ module Experiment.TismirExperiment (
     patternImpact,
 
     -- * (Where are the patterns?) pattern usage
-    patternGlobalFreq,
+
+    -- patternGlobalFreq,
+    patternFreqInCorpus,
     patternOccuranceG,
     highlightPatternInCorpus,
     drawOccuranceInCorpus,
     patternDepthInCorpus,
     markPatternIdInCorpus,
+    getRuleDepth,
     SizeFreqDistribution (..),
     OccuranceHeatMap (..),
 
@@ -33,8 +36,8 @@ import Control.Arrow
 import Control.Monad.Fix (MonadFix (mfix))
 import Data.Functor.Foldable
 import Data.Functor.Foldable.TH
-import Data.Map (Map)
-import qualified Data.Map as Map
+import Data.Map.Strict (Map)
+import qualified Data.Map.Strict as Map
 import Data.Maybe
 import Data.Set (Set)
 import qualified Data.Set as Set
@@ -45,6 +48,8 @@ import Compression.TreeUtils (sizeTree)
 import Data.Aeson
 import Data.Function
 import Data.Functor.Base
+import Data.List
+import Data.Ord
 import Data.Tree
 import Diagrams.Backend.SVG
 import Diagrams.Prelude
@@ -53,8 +58,6 @@ import Prettyprinter (pretty)
 import Visualization.BackEnd (BackEnd)
 import Visualization.Text
 import Visualization.Tree (treeDiagram)
-import Data.List
-import Data.Ord
 
 type MetaID = String
 type PatternID = String
@@ -160,6 +163,34 @@ markPatternIdInCorpus =
         . Attributed.sltpsAttributed
         . markPatternIdDecompressed
 
+patternFreqInCorpus :: (_) => SLFP a k -> Map PatternID Int
+patternFreqInCorpus slfp =
+    Map.filterWithKey
+        (\k _ -> k `Map.member` globalPatterns slfp)
+        . Map.unionsWith (+)
+        . fmap (getPatternCount . fmap fst)
+        . Map.elems
+        . markPatternIdInCorpus
+        $ slfp
+
+getPatternCount :: (_) => Tree [k] -> Map k Int
+getPatternCount =
+    foldl'
+        (foldr (\pId -> Map.insertWith (+) pId 1))
+        mempty
+
+-- >>> getPatternCount (Node ["a","b"] [Node [] [], Node ["a"] [Node ["d"] []]])
+-- fromList [("a",2),("b",1),("d",1)]
+
+getRuleDepth :: (_) => Tree r -> Map r [Double]
+getRuleDepth t =
+    Map.unionsWith
+        (++)
+        ((\(r, d) -> Map.singleton r [d]) <$> withDepth t)
+
+-- >>>  getRuleDepth (Node "a" [Node "g" [], Node "a" [Node "d" []]])
+-- fromList [("a",[0.0,0.5]),("d",[1.0]),("g",[0.5])]
+
 patternDepthInCorpus ::
     (_) =>
     SLFP a k ->
@@ -242,7 +273,6 @@ newtype SizeFreqDistribution a
 allDependents :: SLFP r k -> Map PatternID (Set PatternID)
 allDependents slfp = Map.fromList $ (id &&& patternDependents slfp) <$> allPatterns slfp
 
-
 data KeyValuePair k v = KeyValuePair {name :: k, value :: v}
     deriving (Generic)
 
@@ -281,17 +311,17 @@ drawOccuranceInPiece pieceId t =
 highlightedToColored (True, a) = (brown, a)
 highlightedToColored (False, a) = (white, a)
 
-
-
-
-
-patternImpact :: (PatternID -> Int) -> (PatternID -> [PatternID]) -> 
-    PatternID  -> Double
-patternImpact freq dependents pId = sumOverRank
-    $ fromIntegral . freq <$> dependents pId
+patternImpact ::
+    (PatternID -> Int) ->
+    (PatternID -> [PatternID]) ->
+    PatternID ->
+    Double
+patternImpact freq dependents pId =
+    sumOverRank $
+        fromIntegral . freq <$> dependents pId
 
 sumOverRank :: [Double] -> Double
-sumOverRank xs = sum  $ zipWith (*) [1..] $ sortBy (comparing Down) xs
+sumOverRank xs = sum $ zipWith (*) [1 ..] $ sortBy (comparing Down) xs
 
 -- >>> sumOverRank [2,5,1]
 -- 12.0
