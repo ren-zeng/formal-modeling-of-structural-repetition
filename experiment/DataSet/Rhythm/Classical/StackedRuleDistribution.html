@@ -129,7 +129,8 @@
     const transformedData = rawData.map(item => ({
         ruleName: item.ruleName,
         ruleCategory: item.ruleCategory,
-        occurancesInCorpus: item.occurancesInCorpus
+        occurancesInCorpus: item.occurancesInCorpus,
+        ruleDepths: item.ruleDepths // Include the ruleDepths array for histogram
     }));
     
     // Process by category first
@@ -295,7 +296,7 @@
                     .attr("dy", ".35em")
                     .attr("text-anchor", "middle")
                     .attr("fill", "#000")
-                    .style("font-size", "10px")
+                    .style("font-size", "12px")
                     .style("pointer-events", "none")
                     .text(feature.feature);
             }
@@ -307,7 +308,7 @@
     
     // Add legend for categories
     const categoryLegend = svg.append("g")
-        .attr("font-size", "12px")
+        .attr("font-size", "14px")
         .attr("text-anchor", "start")
         .selectAll(".category-legend")
         .data(categories)
@@ -322,12 +323,18 @@
             d3.select(this).select("text")
                 .classed("highlighted", true);
                 
-            // Highlight all bars for this category
+            // Highlight all bars for this category in the main plot
             d3.selectAll(`.feature-bar[data-category="${category}"]`)
                 .classed("highlighted", true);
                 
-            // Fade other categories
+            // Highlight corresponding histogram bars
+            d3.selectAll(`.histogram-bar[data-category="${category}"]`)
+                .classed("highlighted", true);
+                
+            // Fade other categories in both plots
             d3.selectAll(`.feature-bar:not([data-category="${category}"])`)
+                .style("opacity", 0.3);
+            d3.selectAll(`.histogram-bar:not([data-category="${category}"])`)
                 .style("opacity", 0.3);
         })
         .on("mouseleave", function(event, category) {
@@ -337,8 +344,11 @@
             d3.select(this).select("text")
                 .classed("highlighted", false);
                 
-            // Reset bar highlighting
+            // Reset bar highlighting in both plots
             d3.selectAll(".feature-bar")
+                .classed("highlighted", false)
+                .style("opacity", 1);
+            d3.selectAll(".histogram-bar")
                 .classed("highlighted", false)
                 .style("opacity", 1);
         });
@@ -380,11 +390,190 @@
     
     // Calculate dynamic SVG height based on content
     const chartHeight = height + margin.top + margin.bottom;
+    // Add height for the histogram with more spacing
+    const histogramHeight = 200;
+    const spacingBetweenPlots = 100; // Increased spacing between plots
     const legendHeight = Math.max(500, (categories.length + allFeaturesSorted.length + 3) * 20); // Reasonable height limit
-    const svgHeight = Math.max(chartHeight, legendHeight);
+    const svgHeight = Math.max(chartHeight + histogramHeight + spacingBetweenPlots + 50, legendHeight);
     
-    // Update SVG height to accommodate all legends
+    // Update SVG height to accommodate all legends and the histogram
     d3.select("#myPlot svg").attr("height", svgHeight);
+    
+    // Create container for histogram with increased spacing
+    const histogramContainer = svg.append("g")
+        .attr("class", "histogram-container")
+        .attr("transform", `translate(0, ${height + spacingBetweenPlots})`);
+    
+    // Add title for the histogram
+    histogramContainer.append("text")
+        .attr("x", width/2)
+        .attr("y", -30)
+        .attr("text-anchor", "middle")
+        .style("font-size", "16px")
+        .text("Depth Distribution of Rule Category (normalized by tree depth)");
+    
+    // Process data for the histogram
+    // Extract rule depths from the data - need to flatten the ruleDepths arrays
+    const ruleDepths = [];
+    transformedData.forEach(d => {
+        // Check if ruleDepths exists and is an array
+        if (d.ruleDepths && Array.isArray(d.ruleDepths)) {
+            d.ruleDepths.forEach(depth => {
+                ruleDepths.push({
+                    depth: depth,
+                    category: d.ruleCategory,
+                    feature: d.ruleName,
+                    frequency: d.occurancesInCorpus / d.ruleDepths.length // Distribute frequency across depth values
+                });
+            });
+        }
+    });
+    
+    // Get unique depth values and sort them
+    const uniqueDepths = Array.from(new Set(ruleDepths.map(d => d.depth))).sort((a, b) => a - b);
+    
+    // Define custom bin thresholds based on the unique depth values
+    // Using fixed bins from 0 to 1
+    const minDepth = 0;
+    const maxDepth = 1;
+    const binCount = 10; // Number of bins to divide the 0-1 range
+    
+    // Create evenly spaced bin thresholds from 0 to 1
+    const binThresholds = Array.from({length: binCount + 1}, (_, i) => i / binCount);
+    
+    // Create X scale for histogram with fixed range from 0 to 1
+    const histogramX = d3.scaleLinear()
+        .domain([minDepth, maxDepth])
+        .range([0, width]);
+    
+    // Create bin containers
+    const bins = [];
+    for (let i = 0; i < binThresholds.length - 1; i++) {
+        bins.push({
+            x0: binThresholds[i],
+            x1: binThresholds[i + 1],
+            data: []
+        });
+    }
+    
+    // Place depth values into bins
+    ruleDepths.forEach(item => {
+        // Find the appropriate bin
+        const bin = bins.find(b => item.depth >= b.x0 && (item.depth < b.x1 || 
+            (item.depth === b.x1 && b.x1 === d3.max(uniqueDepths))));
+        
+        if (bin) {
+            bin.data.push(item);
+        }
+    });
+    
+    // Count by category within each bin
+    bins.forEach(bin => {
+        // Initialize category counts
+        bin.categories = categories.map(category => ({
+            category,
+            sum: 0
+        }));
+        
+        // Count frequencies by category
+        bin.data.forEach(item => {
+            const categoryObj = bin.categories.find(c => c.category === item.category);
+            if (categoryObj) {
+                categoryObj.sum += item.frequency;
+            }
+        });
+        
+        // Calculate total for this bin
+        bin.total = d3.sum(bin.categories, d => d.sum);
+    });
+    
+    // Create the X axis for the histogram
+    histogramContainer.append("g")
+        .attr("transform", `translate(0, ${histogramHeight})`)
+        .call(d3.axisBottom(histogramX)
+            .tickValues(binThresholds)
+            .tickFormat(d3.format(".2f")));
+    
+    // X axis label
+    histogramContainer.append("text")
+        .attr("x", width/2)
+        .attr("y", histogramHeight + 40)
+        .attr("text-anchor", "middle")
+        .text("Rule Depth");
+    
+    // Create Y scale for histogram
+    const histogramY = d3.scaleLinear()
+        .domain([0, d3.max(bins, d => d.total) || 1])
+        .range([histogramHeight, 0]);
+    
+    // Create the Y axis for the histogram
+    histogramContainer.append("g")
+        .call(d3.axisLeft(histogramY));
+    
+    // Y axis label
+    histogramContainer.append("text")
+        .attr("transform", "rotate(-90)")
+        .attr("y", -margin.left + 40)
+        .attr("x", -histogramHeight/2)
+        .attr("text-anchor", "middle")
+        .text("Frequency");
+    
+    // Draw the stacked histogram
+    bins.forEach(bin => {
+        let y0 = 0; // Starting y position for stacking
+        
+        // Sort categories to match main plot order
+        bin.categories.sort((a, b) => {
+            const categoryA = categories.indexOf(a.category);
+            const categoryB = categories.indexOf(b.category);
+            return categoryA - categoryB;
+        });
+        
+        bin.categories.forEach(categoryData => {
+            // Skip if sum is 0
+            if (categoryData.sum === 0) return;
+            
+            const binWidth = histogramX(bin.x1) - histogramX(bin.x0);
+            const effectiveWidth = binWidth * 0.9; // 90% of bin width to add padding
+            
+            histogramContainer.append("rect")
+                .attr("class", "histogram-bar")
+                .attr("data-bin", `${bin.x0.toFixed(2)}-${bin.x1.toFixed(2)}`)
+                .attr("data-category", categoryData.category)
+                .attr("x", histogramX(bin.x0) + (binWidth * 0.05)) // 5% padding on each side
+                .attr("width", effectiveWidth)
+                .attr("y", histogramY(y0 + categoryData.sum))
+                .attr("height", histogramY(y0) - histogramY(y0 + categoryData.sum))
+                .attr("fill", colorCategory(categoryData.category))
+                .attr("stroke", "#333")
+                .attr("stroke-width", 0.5)
+                .on("mouseover", function(event) {
+                    tooltip.transition()
+                        .duration(200)
+                        .style("opacity", 0.9);
+                    tooltip.html(`Depth range: ${bin.x0.toFixed(2)}-${bin.x1.toFixed(2)}<br>` +
+                                 `Category: ${categoryData.category}<br>` +
+                                 `Frequency: ${categoryData.sum}`)
+                        .style("left", (event.pageX + 10) + "px")
+                        .style("top", (event.pageY - 28) + "px");
+                        
+                    // Highlight all bars with this category
+                    d3.selectAll(`.feature-bar[data-category="${categoryData.category}"]`)
+                        .classed("highlighted", true);
+                })
+                .on("mouseout", function() {
+                    tooltip.transition()
+                        .duration(500)
+                        .style("opacity", 0);
+                        
+                    // Reset highlighting
+                    d3.selectAll(".feature-bar")
+                        .classed("highlighted", false);
+                });
+                
+            y0 += categoryData.sum; // Update starting y position for next stack
+        });
+    });
     
     // Create a container for the feature legend
     const featureLegendContainer = svg.append("g")
@@ -396,7 +585,7 @@
         .attr("class", "legend-title")
         .attr("y", -10)
         .attr("font-weight", "bold")
-        .attr("font-size", "12px") // Match category font size
+        .attr("font-size", "14px") // Match category font size
         .text("Features");
     
     // Add legend for features
@@ -406,7 +595,7 @@
         .attr("class", "feature-legend-item")
         .attr("data-feature", d => d)
         .attr("transform", (d, i) => `translate(0, ${i * 20})`)
-        .attr("font-size", "12px") // Match category font size
+        .attr("font-size", "14px") // Match category font size
         .on("mouseenter", function(event, feature) {
             // Highlight the legend item
             d3.select(this).select("rect")
@@ -472,8 +661,8 @@
         const ctx = canvas.getContext('2d');
         const img = new Image();
         
-        // Scale factor for higher resolution (4x)
-        const scaleFactor = 4;
+        // Scale factor for higher resolution (8x)
+        const scaleFactor = 8;
         
         img.onload = function() {
             // Set canvas dimensions with scale factor for higher resolution

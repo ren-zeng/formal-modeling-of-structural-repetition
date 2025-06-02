@@ -117,50 +117,197 @@
 
         // Function to save as PDF
         function savePDF() {
-            const svgElement = document.querySelector('svg');
-            const svgData = new XMLSerializer().serializeToString(svgElement);
-            const canvas = document.createElement('canvas');
-            const ctx = canvas.getContext('2d');
-            const img = new Image();
+            try {
+                const svgElement = document.querySelector('svg');
+                if (!svgElement) {
+                    alert('No SVG found to export');
+                    return;
+                }
 
-            // Scale factor for higher resolution (4x)
-            const scaleFactor = 4;
-            
-            // Get actual SVG dimensions from viewBox
-            const viewBox = svgElement.getAttribute('viewBox').split(' ');
-            const svgWidth = parseFloat(viewBox[2]);
-            const svgHeight = parseFloat(viewBox[3]);
+                // Method 1: Try direct jsPDF SVG support first
+                try {
+                    const { jsPDF } = window.jspdf;
+                    
+                    let svgWidth, svgHeight;
+                    const viewBox = svgElement.getAttribute('viewBox');
+                    
+                    if (viewBox) {
+                        const viewBoxValues = viewBox.split(' ');
+                        svgWidth = parseFloat(viewBoxValues[2]);
+                        svgHeight = parseFloat(viewBoxValues[3]);
+                    } else {
+                        const rect = svgElement.getBoundingClientRect();
+                        svgWidth = rect.width || 800;
+                        svgHeight = rect.height || 600;
+                    }
 
-            img.onload = function () {
-                // Set canvas dimensions with scale factor for higher resolution
-                canvas.width = svgWidth * scaleFactor;
-                canvas.height = svgHeight * scaleFactor;
+                    const orientation = svgWidth > svgHeight ? 'landscape' : 'portrait';
+                    const pdf = new jsPDF({
+                        orientation: orientation,
+                        unit: 'pt',
+                        format: [svgWidth, svgHeight]
+                    });
 
-                // Clear canvas and scale the context to match the increased canvas size
-                ctx.clearRect(0, 0, canvas.width, canvas.height);
-                ctx.scale(scaleFactor, scaleFactor);
-                ctx.drawImage(img, 0, 0, svgWidth, svgHeight);
+                    const svgString = new XMLSerializer().serializeToString(svgElement);
+                    
+                    if (pdf.svg) {
+                        pdf.svg(svgString, {
+                            x: 0,
+                            y: 0,
+                            width: svgWidth,
+                            height: svgHeight
+                        }).then(() => {
+                            pdf.save('{{figureName}}.pdf');
+                        });
+                        return;
+                    }
+                } catch (directSvgError) {
+                    console.log('Direct SVG method failed, trying canvas method:', directSvgError);
+                }
 
-                // Create PDF with proper dimensions that match the SVG's viewBox
-                const imgData = canvas.toDataURL('image/png', 1.0);
-                const { jsPDF } = window.jspdf;
+                // Method 2: Enhanced canvas conversion
+                const svgClone = svgElement.cloneNode(true);
                 
-                // Determine orientation based on aspect ratio
-                const orientation = svgWidth > svgHeight ? 'landscape' : 'portrait';
+                // Remove problematic elements
+                const problematicElements = svgClone.querySelectorAll('foreignObject, switch, metadata');
+                problematicElements.forEach(el => el.remove());
                 
-                const pdf = new jsPDF({
-                    orientation: orientation,
-                    unit: 'pt', // Use points for more precise sizing
-                    format: [svgWidth, svgHeight],
-                    hotfixes: ['px_scaling']
+                // Inline essential styles only
+                const allElements = svgClone.querySelectorAll('*');
+                allElements.forEach(element => {
+                    try {
+                        const computedStyle = window.getComputedStyle(element);
+                        let styleStr = '';
+                        
+                        const importantProps = ['fill', 'stroke', 'stroke-width', 'opacity', 'font-family', 'font-size', 'font-weight'];
+                        importantProps.forEach(prop => {
+                            const value = computedStyle.getPropertyValue(prop);
+                            if (value && value !== 'none' && value !== 'normal') {
+                                styleStr += `${prop}:${value};`;
+                            }
+                        });
+                        
+                        if (styleStr) {
+                            element.setAttribute('style', styleStr);
+                        }
+                    } catch (styleError) {
+                        // Ignore style errors for individual elements
+                    }
                 });
 
-                // Add image at full dimensions
-                pdf.addImage(imgData, 'PNG', 0, 0, svgWidth, svgHeight, '', 'FAST');
-                pdf.save('{{figureName}}.pdf');
-            };
+                let svgWidth, svgHeight;
+                const viewBox = svgElement.getAttribute('viewBox');
+                
+                if (viewBox) {
+                    const viewBoxValues = viewBox.split(' ');
+                    svgWidth = parseFloat(viewBoxValues[2]);
+                    svgHeight = parseFloat(viewBoxValues[3]);
+                } else {
+                    const rect = svgElement.getBoundingClientRect();
+                    svgWidth = rect.width || 800;
+                    svgHeight = rect.height || 600;
+                }
 
-            img.src = 'data:image/svg+xml;base64,' + btoa(unescape(encodeURIComponent(svgData)));
+                const canvas = document.createElement('canvas');
+                const ctx = canvas.getContext('2d');
+                const img = new Image();
+
+                const scaleFactor = 1.5;
+                canvas.width = svgWidth * scaleFactor;
+                canvas.height = svgHeight * scaleFactor;
+                
+                ctx.fillStyle = 'white';
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+                ctx.scale(scaleFactor, scaleFactor);
+
+                const timeout = setTimeout(() => {
+                    alert('PDF generation timed out. The visualization is too complex for PDF export. Please use SVG export instead.');
+                }, 20000);
+
+                img.onload = function () {
+                    try {
+                        clearTimeout(timeout);
+                        
+                        ctx.drawImage(img, 0, 0, svgWidth, svgHeight);
+
+                        let imgData;
+                        try {
+                            imgData = canvas.toDataURL('image/png', 0.9);
+                        } catch (canvasError) {
+                            throw new Error('Canvas to PNG conversion failed: ' + canvasError.message);
+                        }
+                        
+                        if (!imgData || imgData === 'data:,' || imgData.length < 1000 || !imgData.startsWith('data:image/png')) {
+                            throw new Error('Generated image data is invalid or too small');
+                        }
+
+                        const { jsPDF } = window.jspdf;
+                        const orientation = svgWidth > svgHeight ? 'landscape' : 'portrait';
+                        const pdf = new jsPDF({
+                            orientation: orientation,
+                            unit: 'pt',
+                            format: [svgWidth, svgHeight],
+                            hotfixes: ['px_scaling']
+                        });
+
+                        pdf.addImage(imgData, 'PNG', 0, 0, svgWidth, svgHeight, '', 'FAST');
+                        pdf.save('{{figureName}}.pdf');
+                        
+                    } catch (error) {
+                        clearTimeout(timeout);
+                        console.error('Error in canvas method:', error);
+                        
+                        // Method 3: Fallback to text-only PDF
+                        try {
+                            const { jsPDF } = window.jspdf;
+                            const pdf = new jsPDF();
+                            pdf.setFontSize(16);
+                            pdf.text('{{figureName}}', 20, 30);
+                            pdf.setFontSize(12);
+                            pdf.text('The visualization was too complex to export as an image.', 20, 50);
+                            pdf.text('Please use the SVG export option for full fidelity.', 20, 70);
+                            pdf.text('Generated on: ' + new Date().toLocaleString(), 20, 90);
+                            pdf.save('{{figureName}} - Text Only.pdf');
+                            
+                            alert('Complex visualization exported as text-only PDF. For the full visualization, please use SVG export.');
+                        } catch (fallbackError) {
+                            alert('PDF export failed completely. Please use SVG export: ' + error.message);
+                        }
+                    }
+                };
+
+                img.onerror = function(error) {
+                    clearTimeout(timeout);
+                    console.error('Image loading failed:', error);
+                    alert('Failed to convert SVG to image. This visualization may be too complex for PDF export. Please use SVG export instead.');
+                };
+
+                try {
+                    const svgString = new XMLSerializer().serializeToString(svgClone);
+                    const cleanSvgString = svgString
+                        .replace(/(\r\n|\n|\r)/gm, '')
+                        .replace(/\s+/g, ' ')
+                        .trim();
+                    
+                    const svgBlob = new Blob([cleanSvgString], { type: 'image/svg+xml;charset=utf-8' });
+                    const url = URL.createObjectURL(svgBlob);
+                    
+                    img.src = url;
+                    
+                    setTimeout(() => {
+                        URL.revokeObjectURL(url);
+                    }, 25000);
+                    
+                } catch (encodingError) {
+                    clearTimeout(timeout);
+                    console.error('SVG encoding failed:', encodingError);
+                    alert('Failed to process SVG for PDF export. Please use SVG export instead.');
+                }
+
+            } catch (error) {
+                console.error('Error in PDF export:', error);
+                alert('PDF export failed: ' + error.message + '. Please use SVG export instead.');
+            }
         }
 
         // Set up responsive dimensions
