@@ -1,0 +1,500 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Formal Modeling of Structural Repetition</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+            line-height: 1.6;
+            color: #333;
+        }
+        h1 {
+            color: #2c3e50;
+            border-bottom: 2px solid #3498db;
+            padding-bottom: 10px;
+        }
+        h2 {
+            color: #34495e;
+            margin-top: 30px;
+        }
+        .section {
+            background: #f8f9fa;
+            padding: 20px;
+            margin: 20px 0;
+            border-radius: 8px;
+            border-left: 4px solid #3498db;
+        }
+        .visualization-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(10px, 1fr));
+            max-width: 100%;
+            gap: 15px;
+            margin: 20px 0;
+        }
+        
+        @media (min-width: 1000px) {
+            .visualization-grid {
+                grid-template-columns: repeat(1, 1fr);
+            }
+        }
+        
+        @media (max-width: 999px) {
+            .visualization-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+        .viz-card {
+            background: white;
+            padding: 15px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            border: 1px solid #e1e8ed;
+            min-height: flex;
+            display: flex;
+            flex-direction: column;
+        }
+        .viz-card h3 {
+            margin-top: 0;
+            color: #2c3e50;
+        }
+        .viz-content {
+            flex-grow: 1;
+            display: flex;
+            flex-direction: column;
+        }
+        .viz-iframe {
+            flex-grow: 1;
+            min-height: 1000px;
+            width: flex;
+            border: 1px solid #e1e8ed;
+            border-radius: 4px;
+            background: #ffffff;
+        }
+        .viz-iframe-fallback {
+            display: none;
+            padding: 20px;
+            text-align: center;
+            background: #f8f9fa;
+            border: 1px solid #e1e8ed;
+            border-radius: 4px;
+            color: #666;
+        }
+        .viz-link {
+            display: inline-block;
+            background: #3498db;
+            color: white;
+            text-decoration: none;
+            padding: 8px 16px;
+            border-radius: 4px;
+            transition: background-color 0.3s;
+            margin: 10px 5px 0 0;
+        }
+        .viz-link:hover {
+            background: #2980b9;
+        }
+        .viz-link.primary {
+            background: #27ae60;
+        }
+        .viz-link.primary:hover {
+            background: #229954;
+        }
+        .description {
+            color: #666;
+            margin: 10px 0;
+        }
+        .readme-section {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            border: 1px solid #e1e8ed;
+        }
+        .iframe-error-message {
+            color: #e74c3c;
+            font-style: italic;
+            margin-top: 10px;
+            display: none;
+        }
+        
+        /* Floating Table of Contents */
+        .toc-container {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            width: 250px;
+            max-height: calc(100vh - 40px);
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(10px);
+            border: 1px solid #e1e8ed;
+            border-radius: 8px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+            z-index: 1000;
+            transition: all 0.3s ease;
+            overflow: hidden;
+        }
+        
+        .toc-header {
+            background: #3498db;
+            color: white;
+            padding: 12px 15px;
+            font-weight: 600;
+            cursor: pointer;
+            user-select: none;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        
+        .toc-toggle {
+            font-size: 14px;
+            transition: transform 0.3s ease;
+        }
+        
+        .toc-content {
+            max-height: calc(100vh - 120px);
+            overflow-y: auto;
+            padding: 0;
+            transition: max-height 0.3s ease;
+        }
+        
+        .toc-content.collapsed {
+            max-height: 0;
+            padding: 0;
+        }
+        
+        .toc-content ul {
+            list-style: none;
+            margin: 0;
+            padding: 0;
+        }
+        
+        .toc-content li {
+            border-bottom: 1px solid #f0f0f0;
+        }
+        
+        .toc-content li:last-child {
+            border-bottom: none;
+        }
+        
+        .toc-content a {
+            display: block;
+            padding: 10px 15px;
+            color: #333;
+            text-decoration: none;
+            font-size: 14px;
+            transition: all 0.2s ease;
+            border-left: 3px solid transparent;
+        }
+        
+        .toc-content a:hover {
+            background: #f8f9fa;
+            border-left-color: #3498db;
+            color: #2c3e50;
+        }
+        
+        .toc-content a.active {
+            background: #e3f2fd;
+            border-left-color: #3498db;
+            color: #2c3e50;
+            font-weight: 500;
+        }
+        
+        .toc-content .toc-level-2 {
+            padding-left: 25px;
+            font-size: 13px;
+        }
+        
+        .toc-content .toc-level-3 {
+            padding-left: 35px;
+            font-size: 12px;
+            color: #666;
+        }
+        
+        /* Hide TOC on small screens */
+        @media (max-width: 1024px) {
+            .toc-container {
+                display: none;
+            }
+        }
+        
+        /* Smooth scrolling */
+        html {
+            scroll-behavior: smooth;
+        }
+        
+        /* Add some top padding to account for fixed positioning */
+        h1, h2, h3 {
+            scroll-margin-top: 20px;
+        }
+    </style>
+</head>
+<body>
+    <!-- Floating Table of Contents -->
+    <div class="toc-container" id="tocContainer">
+        <div class="toc-header" onclick="toggleTOC()">
+            <span>Table of Contents</span>
+            <span class="toc-toggle" id="tocToggle">−</span>
+        </div>
+        <div class="toc-content" id="tocContent">
+            <ul>
+                <li><a href="#main-title" data-target="main-title">Formal Modeling of Structural Repetition</a></li>
+                <li><a href="#about-project" data-target="about-project">About This Project</a></li>
+                <li><a href="#visualizations" data-target="visualizations">Interactive Visualizations</a></li>
+                <li><a href="#harmonic-patterns" data-target="harmonic-patterns" class="toc-level-2">Discovering Harmonic Pattern</a></li>
+                <li><a href="#harmonic-stacked-rule" data-target="harmonic-stacked-rule" class="toc-level-3">Stacked Rule Distribution</a></li>
+                <li><a href="#harmonic-pattern-freq" data-target="harmonic-pattern-freq" class="toc-level-3">Pattern Frequency by Size</a></li>
+                <li><a href="#harmonic-compression" data-target="harmonic-compression" class="toc-level-3">Compression Statistics</a></li>
+                <li><a href="#harmonic-pattern-dependency" data-target="harmonic-pattern-dependency" class="toc-level-3">Pattern Dependency</a></li>
+                <li><a href="#rhythmic-patterns" data-target="rhythmic-patterns" class="toc-level-2">Discovering Rhythmic Pattern</a></li>
+                <li><a href="#rhythmic-stacked-rule" data-target="rhythmic-stacked-rule" class="toc-level-3">Stacked Rule Distribution</a></li>
+                <li><a href="#rhythmic-pattern-freq" data-target="rhythmic-pattern-freq" class="toc-level-3">Pattern Frequency and Size</a></li>
+                <li><a href="#rhythmic-compression" data-target="rhythmic-compression" class="toc-level-3">Compression Statistics</a></li>
+                <li><a href="#project-info" data-target="project-info">Project Information</a></li>
+            </ul>
+        </div>
+    </div>
+
+    <h1 id="main-title">Formal Modeling of Structural Repetition using Tree Compression</h1>
+    
+    <div class="readme-section">
+        <h2 id="about-project">About This Project</h2>
+        <p>This project presents a formal modeling approach to structural repetition using tree compression techniques. The research includes analysis of both harmonic and rhythmic patterns in musical data.</p>
+        
+        
+    </div>
+
+    <div class="section">
+        <h2 id="visualizations">📊 Interactive Visualizations</h2>
+        <p>Explore the research results through these interactive visualizations:</p>
+        <p><strong>Note:</strong> If the embedded visualizations don't load properly, click the "Open in New Tab" links to view them directly.</p>
+
+        <h3 id="harmonic-patterns">Discovering Harmonic Pattern</h3>
+        <div class="visualization-grid">
+            <div class="viz-card" id="harmonic-stacked-rule">
+                <h3>Stacked Rule Distribution</h3>
+                <div class="viz-content">
+                    <p class="description">Hierarchical view of rule distribution patterns</p>
+                    <iframe src="Experiment/DataSet/Harmony/StackedRuleDistribution.html" 
+                            class="viz-iframe"
+                            frameborder="0" 
+                            onerror="this.style.display='none'; this.nextElementSibling.style.display='block';">
+                    </iframe>
+                    <div class="viz-iframe-fallback">
+                        <p>📊 Visualization not loading in iframe</p>
+                        <p>Click "Open in New Tab" below to view the interactive chart</p>
+                    </div>
+                    <div>
+                        <a href="Experiment/DataSet/Harmony/StackedRuleDistribution.html" class="viz-link primary" target="_blank">Open in New Tab</a>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="viz-card" id="harmonic-pattern-freq">
+                <h3>Pattern Frequency by Size</h3>
+                <div class="viz-content">
+                    <p class="description">Analysis of pattern frequency distribution by size in harmony data</p>
+                    <iframe src="Experiment/Result/Harmony/patternFreqSize(Harmony).html" 
+                            class="viz-iframe"
+                            frameborder="0" 
+                            onerror="this.style.display='none'; this.nextElementSibling.style.display='block';">
+                    </iframe>
+                    <div class="viz-iframe-fallback">
+                        <p>📊 Visualization not loading in iframe</p>
+                        <p>Click "Open in New Tab" below to view the interactive chart</p>
+                    </div>
+                    <div>
+                        <a href="Experiment/Result/Harmony/patternFreqSize(Harmony).html" class="viz-link primary" target="_blank">Open in New Tab</a>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="viz-card" id="harmonic-compression">
+                <h3>Compression Statistics</h3>
+                <div class="viz-content">
+                    <p class="description">Scatter plot showing compression analysis results for harmony</p>
+                    <iframe src="Experiment/Result/Harmony/CompressionScatterPlot(Harmony).html" 
+                            class="viz-iframe"
+                            frameborder="0" 
+                            onerror="this.style.display='none'; this.nextElementSibling.style.display='block';">
+                    </iframe>
+                    <div class="viz-iframe-fallback">
+                        <p>📊 Visualization not loading in iframe</p>
+                        <p>Click "Open in New Tab" below to view the interactive chart</p>
+                    </div>
+                    <div>
+                        <a href="Experiment/Result/Harmony/CompressionScatterPlot(Harmony).html" class="viz-link primary" target="_blank">Open in New Tab</a>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="viz-card" id="harmonic-pattern-dependency">
+                <h3>Pattern Dependency</h3>
+                <div class="viz-content">
+                    <p class="description">Interactive network visualization tool</p>
+                    <iframe src="src/VisualHTML/hierarchical-edge-bundling/index.html" 
+                            class="viz-iframe"
+                            frameborder="0" 
+                            onerror="this.style.display='none'; this.nextElementSibling.style.display='block';">
+                    </iframe>
+                    <div class="viz-iframe-fallback">
+                        <p>📊 Visualization not loading in iframe</p>
+                        <p>Click "Open in New Tab" below to view the interactive chart</p>
+                    </div>
+                    <div>
+                        <a href="src/VisualHTML/hierarchical-edge-bundling/index.html" class="viz-link primary" target="_blank">Open in New Tab</a>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <h3 id="rhythmic-patterns">Discovering Rhythmic Pattern</h3>
+        <div class="visualization-grid">
+            <div class="viz-card" id="rhythmic-stacked-rule">
+                <h3>Stacked Rule Distribution</h3>
+                <div class="viz-content">
+                    <p class="description">Rule distribution patterns in classical rhythm data</p>
+                    <iframe src="Experiment/DataSet/Rhythm/Classical/StackedRuleDistribution.html" 
+                            class="viz-iframe"
+                            frameborder="0" 
+                            onerror="this.style.display='none'; this.nextElementSibling.style.display='block';">
+                    </iframe>
+                    <div class="viz-iframe-fallback">
+                        <p>📊 Visualization not loading in iframe</p>
+                        <p>Click "Open in New Tab" below to view the interactive chart</p>
+                    </div>
+                    <div>
+                        <a href="Experiment/DataSet/Rhythm/Classical/StackedRuleDistribution.html" class="viz-link primary" target="_blank">Open in New Tab</a>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="viz-card" id="rhythmic-pattern-freq">
+                <h3>Pattern Frequency and Size</h3>
+                <div class="viz-content">
+                    <p class="description">Pattern frequency analysis for classical rhythm patterns</p>
+                    <iframe src="Experiment/Result/Rhythm/Classical/patternFreqSize(Rhythm).html" 
+                            class="viz-iframe"
+                            frameborder="0" 
+                            onerror="this.style.display='none'; this.nextElementSibling.style.display='block';">
+                    </iframe>
+                    <div class="viz-iframe-fallback">
+                        <p>📊 Visualization not loading in iframe</p>
+                        <p>Click "Open in New Tab" below to view the interactive chart</p>
+                    </div>
+                    <div>
+                        <a href="Experiment/Result/Rhythm/Classical/patternFreqSize(Rhythm).html" class="viz-link primary" target="_blank">Open in New Tab</a>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="viz-card" id="rhythmic-compression">
+                <h3>Compression Statistics</h3>
+                <div class="viz-content">
+                    <p class="description">Compression scatter plot for classical rhythm data</p>
+                    <iframe src="Experiment/Result/Rhythm/Classical/CompressionScatterPlot(Rhythm).html" 
+                            class="viz-iframe"
+                            frameborder="0" 
+                            onerror="this.style.display='none'; this.nextElementSibling.style.display='block';">
+                    </iframe>
+                    <div class="viz-iframe-fallback">
+                        <p>📊 Visualization not loading in iframe</p>
+                        <p>Click "Open in New Tab" below to view the interactive chart</p>
+                    </div>
+                    <div>
+                        <a href="Experiment/Result/Rhythm/Classical/CompressionScatterPlot(Rhythm).html" class="viz-link primary" target="_blank">Open in New Tab</a>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="section">
+        <h2 id="project-info">Project Information</h2>
+        <div class="visualization-grid">
+            <div class="viz-card">
+                <h3>Source Code</h3>
+                <p class="description">View the complete source code on GitHub</p>
+                <a href="https://github.com/ren-zeng/formal-modeling-of-structural-repetition" class="viz-link">GitHub Repository</a>
+            </div>
+            <div class="viz-card">
+                <h3>Documentation</h3>
+                <p class="description">Detailed project documentation and setup instructions</p>
+                <a href="README.md" class="viz-link">Read Documentation</a>
+            </div>
+        </div>
+    </div>
+
+    <footer style="margin-top: 40px; padding-top: 20px; border-top: 1px solid #e1e8ed; text-align: center; color: #666;">
+        <p>Formal Modeling of Structural Repetition using Tree Compression</p>
+    </footer>
+
+    <script>
+        // Add error handling for iframes
+        document.addEventListener('DOMContentLoaded', function() {
+            const iframes = document.querySelectorAll('.viz-iframe');
+            
+            iframes.forEach(iframe => {
+                iframe.addEventListener('load', function() {
+                    // Check if iframe loaded successfully
+                    try {
+                        const iframeDoc = iframe.contentDocument || iframe.contentWindow.document;
+                        if (!iframeDoc || iframeDoc.body.innerHTML.trim() === '') {
+                            throw new Error('Empty iframe content');
+                        }
+                    } catch (e) {
+                        // Cross-origin or loading error
+                        iframe.style.display = 'none';
+                        const fallback = iframe.nextElementSibling;
+                        if (fallback && fallback.classList.contains('viz-iframe-fallback')) {
+                            fallback.style.display = 'block';
+                        }
+                    }
+                });
+                
+                // Set a timeout to show fallback if iframe doesn't load
+                setTimeout(() => {
+                    try {
+                        const iframeDoc = iframe.contentDocument || iframe.contentWindow.document;
+                        if (!iframeDoc) {
+                            throw new Error('Cannot access iframe content');
+                        }
+                    } catch (e) {
+                        iframe.style.display = 'none';
+                        const fallback = iframe.nextElementSibling;
+                        if (fallback && fallback.classList.contains('viz-iframe-fallback')) {
+                            fallback.style.display = 'block';
+                        }
+                    }
+                }, 3000);
+            });
+        });
+
+        // Toggle TOC visibility
+        function toggleTOC() {
+            const tocContent = document.getElementById('tocContent');
+            const tocToggle = document.getElementById('tocToggle');
+            tocContent.classList.toggle('collapsed');
+            tocToggle.textContent = tocContent.classList.contains('collapsed') ? '+' : '−';
+        }
+
+        // Smooth scroll to section
+        document.querySelectorAll('.toc-content a').forEach(anchor => {
+            anchor.addEventListener('click', function(e) {
+                e.preventDefault();
+                const targetId = this.getAttribute('data-target');
+                const targetElement = document.getElementById(targetId);
+                if (targetElement) {
+                    window.scrollTo({
+                        top: targetElement.offsetTop - 20,
+                        behavior: 'smooth'
+                    });
+                }
+            });
+        });
+    </script>
+</body>
+</html>
