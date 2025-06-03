@@ -1,0 +1,766 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Classical Rhythm Pattern Dependency</title>
+    <script src="https://d3js.org/d3.v7.min.js"></script>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background-color: white;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            padding: 20px;
+        }
+        
+        .header {
+            color: grey;
+            font: 13px/25.5px var(--sans-serif);
+            text-transform: uppercase;
+            margin-bottom: 20px;
+        }
+        
+        h1 {
+            font-size: 2em;
+            margin-bottom: 10px;
+            color: #333;
+        }
+        
+        .description {
+            margin-bottom: 30px;
+            color: #666;
+            line-height: 1.6;
+        }
+        
+        #chart-container {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 600px;
+        }
+        
+        .tree-tooltip {
+            box-shadow: 0 4px 20px rgba(0,0,0,0.3);
+            border: 1px solid #333;
+        }
+        
+        .loading {
+            text-align: center;
+            padding: 50px;
+            color: #999;
+        }
+        
+        .error {
+            color: #d32f2f;
+            background-color: #ffebee;
+            padding: 15px;
+            border-radius: 4px;
+            margin: 20px 0;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>Classical Rhythm Pattern Dependency</h1>
+        </div>
+        
+        <div class="description">
+            
+        </div>
+        
+        <div id="chart-container">
+            <div class="loading">Loading visualization...</div>
+        </div>
+    </div>
+
+    <script>
+        // Configuration constants
+        const CONFIG = {
+            EDGE_WIDTH: 2,
+            EDGE_WIDTH_HOVER: 3,
+            EDGE_OPACITY: 0.3,
+            EDGE_OPACITY_HOVER: 1,
+            
+            // Gradient colors
+            GRADIENT_SOURCE_COLOR: "#ff0000",
+            GRADIENT_MIDDLE_COLOR: "#f5f5f5",
+            GRADIENT_TARGET_COLOR: "#0000ff",
+            GRADIENT_MIDDLE_START: "50%",
+            GRADIENT_MIDDLE_END: "50%",
+            
+            // Level colors
+            LEVEL_COLORS: [
+                "#e41a1c", "#377eb8", "#4daf4a", "#984ea3", "#ff7f00", "#999999",
+                "#a65628", "#f781bf", "#999999", "#1f78b4", "#33a02c", "#fb9a99",
+                "#fdbf6f", "#cab2d6", "#6a3d9a", "#b15928", "#a6cee3", "#b2df8a"
+            ],
+            
+            // Colors for different states
+            COLOR_IN: "#00f",
+            COLOR_OUT: "#f00",
+            COLOR_NONE: "#ccc",
+            
+            // Chart dimensions
+            WIDTH: 954
+        };
+
+        // Global state
+        let toggledNode = null;
+        let isToggledMode = false;
+
+        // Utility functions
+        function levelColorScale(level) {
+            return CONFIG.LEVEL_COLORS[level % CONFIG.LEVEL_COLORS.length];
+        }
+
+        function hierarchy(data) {
+            const nodeMap = new Map();
+            data.forEach(d => {
+                nodeMap.set(d.patternID, {
+                    ...d,
+                    children: [],
+                    level: -1
+                });
+            });
+
+            // Calculate dependency levels using topological sort
+            const calculateLevels = () => {
+                const visited = new Set();
+                const visiting = new Set();
+                
+                const dfs = (nodeId) => {
+                    if (visiting.has(nodeId)) {
+                        return 0;
+                    }
+                    if (visited.has(nodeId)) {
+                        return nodeMap.get(nodeId).level;
+                    }
+                    
+                    visiting.add(nodeId);
+                    const node = nodeMap.get(nodeId);
+                    
+                    if (!node.dependenciesDirect || node.dependenciesDirect.length === 0) {
+                        node.level = 0;
+                    } else {
+                        let maxDepLevel = -1;
+                        for (const depId of node.dependenciesDirect) {
+                            if (nodeMap.has(depId)) {
+                                const depLevel = dfs(depId);
+                                maxDepLevel = Math.max(maxDepLevel, depLevel);
+                            }
+                        }
+                        node.level = maxDepLevel + 1;
+                    }
+                    
+                    visiting.delete(nodeId);
+                    visited.add(nodeId);
+                    return node.level;
+                };
+                
+                nodeMap.forEach((node, nodeId) => {
+                    if (!visited.has(nodeId)) {
+                        dfs(nodeId);
+                    }
+                });
+            };
+
+            calculateLevels();
+
+            // Group nodes by level
+            const levelGroups = new Map();
+            nodeMap.forEach(node => {
+                if (!levelGroups.has(node.level)) {
+                    levelGroups.set(node.level, []);
+                }
+                levelGroups.get(node.level).push(node);
+            });
+
+            const maxLevel = Math.max(...Array.from(levelGroups.keys()));
+            
+            const createLevelNode = (level, children) => ({
+                patternID: `Level_${level}`,
+                isVirtual: true,
+                level: level,
+                children: children.sort((a, b) => a.patternID.localeCompare(b.patternID))
+            });
+
+            const root = {
+                patternID: 'Root',
+                isVirtual: true,
+                level: -1,
+                children: []
+            };
+
+            for (let level = 0; level <= maxLevel; level++) {
+                if (levelGroups.has(level)) {
+                    const levelNodes = levelGroups.get(level);
+                    const levelContainer = createLevelNode(level, levelNodes);
+                    root.children.push(levelContainer);
+                }
+            }
+
+            return root;
+        }
+
+        function bilink(root) {
+            const map = new Map(root.leaves().map(d => [d.data.patternID, d]));
+            for (const d of root.leaves()) {
+                d.incoming = [];
+                d.outgoing = [];
+                
+                if (!d.data.isVirtual && d.data.dependenciesDirect) {
+                    d.outgoing = d.data.dependenciesDirect
+                        .map(depId => [d, map.get(depId)])
+                        .filter(([source, target]) => target);
+                }
+            }
+            
+            for (const d of root.leaves()) {
+                for (const o of d.outgoing) {
+                    o[1].incoming.push(o);
+                }
+            }
+            
+            return root;
+        }
+
+        function createTreeTooltipSVG(ruleTree) {
+            if (!ruleTree || ruleTree.length < 2) return null;
+            
+            const rootNode = ruleTree[0];
+            const rootChildren = ruleTree[1];
+            
+            function parseTree(item) {
+                if (Array.isArray(item)) {
+                    if (item.length >= 1) {
+                        const node = item[0];
+                        const children = item.length > 1 ? item[1] : [];
+                        
+                        if (node && typeof node === 'object' && !Array.isArray(node)) {
+                            let nodeText, nodeTag;
+                            if (node.tag === "Hole") {
+                                nodeText = "○";
+                                nodeTag = "Hole";
+                            } else if (node.tag === "Constant" && node.contents) {
+                                nodeText = node.contents.contents || node.contents.tag || "Constant";
+                                nodeTag = node.contents.tag || "Constant";
+                            } else {
+                                nodeText = node.contents || node.tag || "Node";
+                                nodeTag = node.tag;
+                            }
+                            
+                            const result = {
+                                name: nodeText,
+                                tag: nodeTag,
+                                nodeType: node.tag,
+                                children: []
+                            };
+                            
+                            if (Array.isArray(children)) {
+                                for (const child of children) {
+                                    const parsedChild = parseTree(child);
+                                    if (parsedChild) result.children.push(parsedChild);
+                                }
+                            }
+                            return result;
+                        }
+                    }
+                } else if (item && typeof item === 'object') {
+                    let nodeText, nodeTag, nodeType;
+                    if (item.tag === "Hole") {
+                        nodeText = "○";
+                        nodeTag = "Hole";
+                        nodeType = "Hole";
+                    } else if (item.tag === "Constant" && item.contents) {
+                        nodeText = item.contents.contents || item.contents.tag || "Constant";
+                        nodeTag = item.contents.tag || "Constant";
+                        nodeType = "Constant";
+                    } else {
+                        nodeText = item.contents || item.tag || "Node";
+                        nodeTag = item.tag;
+                        nodeType = item.tag;
+                    }
+                    
+                    return {
+                        name: nodeText,
+                        tag: nodeTag,
+                        nodeType: nodeType,
+                        children: []
+                    };
+                }
+                return null;
+            }
+            
+            let treeData;
+            if (rootNode.tag === "Hole") {
+                treeData = {
+                    name: "○",
+                    tag: "Hole",
+                    nodeType: "Hole",
+                    children: []
+                };
+            } else if (rootNode.tag === "Constant" && rootNode.contents) {
+                treeData = {
+                    name: rootNode.contents.contents || rootNode.contents.tag || "Constant",
+                    tag: rootNode.contents.tag || "Constant",
+                    nodeType: "Constant",
+                    children: []
+                };
+            } else {
+                treeData = {
+                    name: rootNode.contents || rootNode.tag || "Root",
+                    tag: rootNode.tag,
+                    nodeType: rootNode.tag,
+                    children: []
+                };
+            }
+            
+            if (Array.isArray(rootChildren)) {
+                for (const child of rootChildren) {
+                    const parsedChild = parseTree(child);
+                    if (parsedChild) treeData.children.push(parsedChild);
+                }
+            }
+            
+            function calculateTreeDimensions(root) {
+                const hierarchy = d3.hierarchy(root);
+                const maxDepth = hierarchy.height;
+                const leaves = hierarchy.leaves().length;
+                
+                const minWidth = 300;
+                const minHeight = 200;
+                const nodeWidth = 100;
+                const nodeHeight = 60;
+                
+                const calculatedWidth = Math.max(minWidth, leaves * nodeWidth);
+                const calculatedHeight = Math.max(minHeight, (maxDepth + 1) * nodeHeight + 120);
+                
+                return {
+                    width: calculatedWidth,
+                    height: calculatedHeight,
+                    maxDepth
+                };
+            }
+            
+            const dimensions = calculateTreeDimensions(treeData);
+            const treeWidth = dimensions.width;
+            const treeHeight = dimensions.height;
+            const fontSize = 11;
+            
+            const treeSvg = d3.create("svg")
+                .attr("width", treeWidth)
+                .attr("height", treeHeight)
+                .style("background", "rgba(0, 0, 0, 0.9)")
+                .style("border-radius", "5px");
+            
+            const treeLayout = d3.tree()
+                .size([treeWidth - 40, treeHeight - 60])
+                .separation((a, b) => {
+                    const aWidth = a.data.name.length * 7 + 16;
+                    const bWidth = b.data.name.length * 7 + 16;
+                    const minSeparation = (aWidth + bWidth) / 2 + 10;
+                    return Math.max(1, minSeparation / 80);
+                });
+            
+            const hierarchyTree = d3.hierarchy(treeData);
+            const treeNodes = treeLayout(hierarchyTree);
+            
+            const g = treeSvg.append("g")
+                .attr("transform", "translate(20, 30)");
+            
+            // Add links
+            g.selectAll(".tree-link")
+                .data(treeNodes.links())
+                .enter().append("line")
+                .attr("class", "tree-link")
+                .attr("x1", d => d.source.x)
+                .attr("y1", d => d.source.y)
+                .attr("x2", d => d.target.x)
+                .attr("y2", d => d.target.y)
+                .style("stroke", "#999")
+                .style("stroke-width", 1.5);
+            
+            // Add nodes
+            const node = g.selectAll(".tree-node")
+                .data(treeNodes.descendants())
+                .enter().append("g")
+                .attr("class", "tree-node")
+                .attr("transform", d => `translate(${d.x},${d.y})`);
+            
+            // Add background shapes
+            node.each(function(d) {
+                const nodeElement = d3.select(this);
+                const textLength = d.data.name.length;
+                const nodeWidth = Math.max(textLength * 7 + 16, 30);
+                const nodeHeight = fontSize + 8;
+                
+                if (d.data.nodeType !== "Hole") {
+                    nodeElement.append("rect")
+                        .attr("width", nodeWidth)
+                        .attr("height", nodeHeight)
+                        .attr("x", -nodeWidth / 2)
+                        .attr("y", -nodeHeight / 2)
+                        .attr("rx", 4)
+                        .style("fill", d => {
+                            if (!d.data.tag) return "rgba(204, 204, 204, 0.8)";
+                            switch(d.data.tag) {
+                                case "Prep": return "rgba(255, 107, 107, 0.8)";
+                                case "Prol": return "rgba(78, 205, 196, 0.8)"; 
+                                case "Term": return "rgba(69, 183, 209, 0.8)";
+                                case "Constant": return "rgba(100, 200, 100, 0.8)";
+                                default: return "rgba(254, 202, 87, 0.8)";
+                            }
+                        })
+                        .style("stroke", "#fff")
+                        .style("stroke-width", 1.5);
+                }
+            });
+            
+            // Add text labels
+            node.append("text")
+                .attr("text-anchor", "middle")
+                .attr("dy", "0.35em")
+                .style("font-family", "monospace")
+                .style("font-size", `${fontSize}px`)
+                .style("fill", "white")
+                .style("font-weight", "bold")
+                .style("text-shadow", "1px 1px 1px rgba(0,0,0,0.8)")
+                .text(d => d.data.name);
+            
+            return treeSvg.node();
+        }
+
+        function createChart(data) {
+            const radius = CONFIG.WIDTH / 2;
+            
+            const tree = d3.cluster()
+                .size([2 * Math.PI, radius - 100]);
+            const root = tree(bilink(d3.hierarchy(data)
+                .sort((a, b) => d3.ascending(a.height, b.height) || d3.ascending(parseInt(a.data.patternID), parseInt(b.data.patternID)))));
+
+            const actualNodes = root.leaves().filter(d => !d.data.isVirtual);
+            
+            const svg = d3.create("svg")
+                .attr("width", CONFIG.WIDTH)
+                .attr("height", CONFIG.WIDTH)
+                .attr("viewBox", [-CONFIG.WIDTH / 2, -CONFIG.WIDTH / 2, CONFIG.WIDTH, CONFIG.WIDTH])
+                .style("max-width", "100%")
+                .style("height", "auto")
+                .style("font", "10px sans-serif");
+
+            // Create tooltip
+            const tooltip = d3.select("body").append("div")
+                .attr("class", "tree-tooltip")
+                .style("position", "absolute")
+                .style("visibility", "hidden")
+                .style("padding", "0")
+                .style("border-radius", "5px")
+                .style("z-index", "1000")
+                .style("pointer-events", "none");
+
+            // Create gradients
+            const defs = svg.append("defs");
+            const allEdges = actualNodes.flatMap(leaf => leaf.outgoing);
+
+            allEdges.forEach((edge, i) => {
+                const [source, target] = edge;
+                
+                const gradient = defs.append("linearGradient")
+                    .attr("id", `gradient-${i}`)
+                    .attr("gradientUnits", "userSpaceOnUse")
+                    .attr("x1", source.y * Math.cos(source.x - Math.PI/2))
+                    .attr("y1", source.y * Math.sin(source.x - Math.PI/2))
+                    .attr("x2", target.y * Math.cos(target.x - Math.PI/2))
+                    .attr("y2", target.y * Math.sin(target.x - Math.PI/2));
+                
+                gradient.append("stop")
+                    .attr("offset", "0%")
+                    .attr("stop-color", CONFIG.GRADIENT_SOURCE_COLOR);
+                
+                gradient.append("stop")
+                    .attr("offset", CONFIG.GRADIENT_MIDDLE_START)
+                    .attr("stop-color", CONFIG.GRADIENT_MIDDLE_COLOR);
+                
+                gradient.append("stop")
+                    .attr("offset", CONFIG.GRADIENT_MIDDLE_END)
+                    .attr("stop-color", CONFIG.GRADIENT_MIDDLE_COLOR);
+                
+                gradient.append("stop")
+                    .attr("offset", "100%")
+                    .attr("stop-color", CONFIG.GRADIENT_TARGET_COLOR);
+            });
+
+            // Create nodes
+            const node = svg.append("g")
+                .selectAll()
+                .data(actualNodes)
+                .join("g")
+                .attr("transform", d => `rotate(${d.x * 180 / Math.PI - 90}) translate(${d.y},0)`)
+                .append("text")
+                .attr("dy", "0.31em")
+                .attr("x", d => d.x < Math.PI ? 6 : -6)
+                .attr("text-anchor", d => d.x < Math.PI ? "start" : "end")
+                .attr("transform", d => d.x >= Math.PI ? "rotate(180)" : null)
+                .attr("fill", d => levelColorScale(d.data.level))
+                .text(d => d.data.patternID)
+                .each(function(d) { 
+                    d.text = this; 
+                    d.originalColor = levelColorScale(d.data.level);
+                })
+                .style("cursor", "pointer")
+                .on("click", function(event, d) {
+                    handleNodeClick(event, d, this, tooltip, svg, actualNodes);
+                })
+                .on("mouseover", function(event, d) {
+                    handleNodeMouseOver(event, d, this);
+                })
+                .on("mouseout", function(event, d) {
+                    handleNodeMouseOut(event, d, this, tooltip);
+                })
+                .on("mousemove", function(event, d) {
+                    handleNodeMouseMove(event, d, tooltip);
+                })
+                .call(text => text.append("title").text(d => `${d.data.patternID}
+Level: ${d.data.level}
+Dependencies: ${d.data.dependenciesDirect ? d.data.dependenciesDirect.length : 0}
+Dependents: ${d.data.dependentsDirect ? d.data.dependentsDirect.length : 0}
+Global Frequency: ${d.data.globalFreq || 0}
+${d.outgoing.length} outgoing connections
+${d.incoming.length} incoming connections
+Click to toggle persistent tree view`));
+
+            // Create links
+            const line = d3.lineRadial()
+                .curve(d3.curveBundle.beta(0.85))
+                .radius(d => d.y)
+                .angle(d => d.x);
+
+            const link = svg.append("g")
+                .attr("fill", "none")
+                .selectAll()
+                .data(allEdges)
+                .join("path")
+                .style("mix-blend-mode", "normal")
+                .attr("stroke", (d, i) => `url(#gradient-${i})`)
+                .attr("stroke-width", CONFIG.EDGE_WIDTH)
+                .attr("stroke-opacity", CONFIG.EDGE_OPACITY)
+                .attr("d", ([i, o]) => line(i.path(o)))
+                .each(function(d, i) { 
+                    d.path = this; 
+                    d.gradientId = `gradient-${i}`;
+                });
+
+            // Store references for event handlers
+            window.currentChart = { link, actualNodes };
+
+            // Add background click handler
+            svg.on("click", function(event) {
+                if (event.target === this && isToggledMode) {
+                    clearToggleState(tooltip);
+                }
+            });
+
+            return svg.node();
+        }
+
+        // Event handlers
+        function handleNodeClick(event, d, element, tooltip, svg, actualNodes) {
+            if (toggledNode === d) {
+                clearToggleState(tooltip);
+            } else {
+                if (toggledNode) {
+                    d3.select(toggledNode.text)
+                        .attr("font-weight", null)
+                        .style("text-decoration", "none");
+                }
+                
+                toggledNode = d;
+                isToggledMode = true;
+                
+                d3.select(element)
+                    .attr("font-weight", "bold")
+                    .style("text-decoration", "underline");
+                
+                if (d.data.ruleTree) {
+                    const treeSvg = createTreeTooltipSVG(d.data.ruleTree);
+                    if (treeSvg) {
+                        tooltip
+                            .style("visibility", "visible")
+                            .html("")
+                            .node().appendChild(treeSvg);
+                        
+                        positionTooltip(d, tooltip, svg);
+                    }
+                }
+                
+                highlightNodeEdges(d);
+            }
+            event.stopPropagation();
+        }
+
+        function handleNodeMouseOver(event, d, element) {
+            if (isToggledMode) return;
+            
+            highlightNodeEdges(d);
+            d3.select(element).attr("font-weight", "bold");
+        }
+
+        function handleNodeMouseOut(event, d, element, tooltip) {
+            if (isToggledMode) return;
+            
+            tooltip.style("visibility", "hidden");
+            d3.select(element).attr("font-weight", null);
+            resetAllEdges();
+        }
+
+        function handleNodeMouseMove(event, d, tooltip) {
+            if (!isToggledMode) {
+                if (d.data.ruleTree) {
+                    const treeSvg = createTreeTooltipSVG(d.data.ruleTree);
+                    if (treeSvg) {
+                        tooltip
+                            .style("visibility", "visible")
+                            .html("")
+                            .node().appendChild(treeSvg);
+                        
+                        tooltip
+                            .style("left", (event.pageX + 10) + "px")
+                            .style("top", (event.pageY - 10) + "px");
+                    }
+                }
+            }
+        }
+
+        function positionTooltip(d, tooltip, svg) {
+            const nodeAngle = d.x;
+            const nodeRadius = d.y;
+            
+            const nodeX = nodeRadius * Math.cos(nodeAngle - Math.PI/2);
+            const nodeY = nodeRadius * Math.sin(nodeAngle - Math.PI/2);
+            
+            const svgElement = svg.node();
+            const svgRect = svgElement.getBoundingClientRect();
+            const svgCenterX = svgRect.left + svgRect.width / 2;
+            const svgCenterY = svgRect.top + svgRect.height / 2;
+            
+            const pageX = svgCenterX + nodeX;
+            const pageY = svgCenterY + nodeY;
+            
+            const offsetDistance = 50;
+            const offsetAngle = nodeAngle - Math.PI/2;
+            const offsetX = Math.cos(offsetAngle) * offsetDistance;
+            const offsetY = Math.sin(offsetAngle) * offsetDistance;
+            
+            let finalX = pageX + offsetX;
+            let finalY = pageY + offsetY;
+            
+            // Keep tooltip on screen
+            const screenWidth = window.innerWidth;
+            const screenHeight = window.innerHeight;
+            const tooltipWidth = 400;
+            const tooltipHeight = 250;
+            
+            if (finalX + tooltipWidth > screenWidth) {
+                finalX = pageX - offsetX - tooltipWidth;
+            }
+            if (finalY + tooltipHeight > screenHeight) {
+                finalY = Math.max(10, finalY - tooltipHeight);
+            }
+            if (finalX < 0) finalX = 10;
+            if (finalY < 0) finalY = 10;
+            
+            tooltip
+                .style("left", finalX + "px")
+                .style("top", finalY + "px");
+        }
+
+        function highlightNodeEdges(d) {
+            if (!window.currentChart) return;
+            
+            const { link } = window.currentChart;
+            
+            link.style("mix-blend-mode", null);
+            
+            d3.selectAll(d.incoming.map(d => d.path))
+                .attr("stroke-opacity", CONFIG.EDGE_OPACITY_HOVER)
+                .attr("stroke-width", CONFIG.EDGE_WIDTH_HOVER)
+                .raise();
+            d3.selectAll(d.incoming.map(([d]) => d.text))
+                .attr("fill", CONFIG.COLOR_OUT)
+                .attr("font-weight", "bold");
+            
+            d3.selectAll(d.outgoing.map(d => d.path))
+                .attr("stroke-opacity", CONFIG.EDGE_OPACITY_HOVER)
+                .attr("stroke-width", CONFIG.EDGE_WIDTH_HOVER)
+                .raise();
+            d3.selectAll(d.outgoing.map(([, d]) => d.text))
+                .attr("fill", CONFIG.COLOR_IN)
+                .attr("font-weight", "bold");
+        }
+
+        function resetAllEdges() {
+            if (!window.currentChart) return;
+            
+            const { link, actualNodes } = window.currentChart;
+            
+            link.style("mix-blend-mode", "normal");
+            
+            link
+                .attr("stroke-opacity", CONFIG.EDGE_OPACITY)
+                .attr("stroke-width", CONFIG.EDGE_WIDTH);
+            
+            actualNodes.forEach(node => {
+                d3.select(node.text)
+                    .attr("fill", node.originalColor)
+                    .attr("font-weight", null);
+            });
+        }
+
+        function clearToggleState(tooltip) {
+            if (toggledNode) {
+                d3.select(toggledNode.text)
+                    .attr("font-weight", null)
+                    .style("text-decoration", "none");
+            }
+            toggledNode = null;
+            isToggledMode = false;
+            tooltip.style("visibility", "hidden");
+            resetAllEdges();
+        }
+
+        // Main execution
+        async function init() {
+            try {
+                
+                
+                const data = [{"definition":[1,{"contents":"PG6","tag":"Var"},{"contents":[{"contents":{"tag":"Split"},"tag":"Constant"},["RG1",[{"contents":{"tag":"Terminate"},"tag":"Constant"}]]],"tag":"With"}],"dependenciesDirect":["PG6"],"dependentsDirect":["PG31","PG83"],"depths":[0.5,0.6,0.6,0.42857142857142855,0.42857142857142855,0.7142857142857143,0.7142857142857143,0.5714285714285714,0.5714285714285714,0.6666666666666666,0.6666666666666666,0.375,0.6666666666666666,0.7142857142857143,0.7142857142857143,0.7142857142857143,0.7142857142857143,0.7142857142857143,0.6,0.6,0.5,0.5,0.5714285714285714,0.375,0.375],"globalFreq":25,"impact":13,"occuranceInCorpus":["(Valid)MozartK282:1M05:08","(Valid)MozartK310:2M01:04","(Valid)MozartK545:2M01:08","(Valid)SchumannN06M02:07"],"patternID":"PG10","ruleTree":[{"contents":{"tag":"Prepare"},"tag":"Constant"},[[{"contents":{"tag":"Split"},"tag":"Constant"},[[{"contents":{"tag":"Terminate"},"tag":"Constant"},[]],[{"contents":{"tag":"Terminate"},"tag":"Constant"},[]]]],[{"contents":{"tag":"Terminate"},"tag":"Constant"},[]]]],"sizeExpanded":5},{"definition":[1,{"contents":{"tag":"Split"},"tag":"Constant"},{"contents":[{"contents":{"tag":"Split"},"tag":"Constant"},["RG2",[]]],"tag":"With"}],"dependenciesDirect":[],"dependentsDirect":["PG21","PG52","PG58"],"depths":[0.125,0,0,0,0,0,0,0,0,0.2857142857142857,0,0,0,0,0,0,0.125,0],"globalFreq":18,"impact":29,"occuranceInCorpus":["(Valid)MozartK331:1M01:04","(Valid)MozartK545:2M01:08","(Valid)SchubertN06M05:08","(Valid)SchubertN06M09:14","(Valid)SchubertN13M10:25","(Valid)SchubertN16M05:08","(Valid)SchubertN20M06:19","(Valid)SchumannN07M01:04","(Valid)SchumannN12M02:09"],"patternID":"PG11","ruleTree":[{"contents":{"tag":"Split"},"tag":"Constant"},[[{"contents":{"tag":"Split"},"tag":"Constant"},[[{"contents":{"tag":"Split"},"tag":"Constant"},[[{"tag":"Hole"},[]],[{"tag":"Hole"},[]]]],[{"contents":{"tag":"Split"},"tag":"Constant"},[[{"tag":"Hole"},[]],[{"tag":"Hole"},[]]]]]],[{"tag":"Hole"},[]]]],"sizeExpanded":9},{"definition":[1,{"contents":{"tag":"Prepare"},"tag":"Constant"},{"contents":"PG5","tag":"Var"}],"dependenciesDirect":["PG5"],"dependentsDirect":["PG40","PG64","PG90","PG91","PG92"],"depths":[0.42857142857142855,0.42857142857142855,0.42857142857142855,0.42857142857142855,0.42857142857142855,0.5714285714285714,0.5714285714285714,0.3333333333333333,0.42857142857142855,0.375,0.42857142857142855,0.42857142857142855,0.42857142857142855,0.2857142857142857,0.5,0.5],"globalFreq":16,"impact":59,"occuranceInCorpus":["(Valid)MozartK282:1M01:04","(Valid)MozartK282:1M05:08","(Valid)MozartK310:2M01:04","(Valid)MozartK545:2M01:08","(Valid)MozartK570:2M01:04","(Valid)SchubertN08M11:20","(Valid)SchubertN09M09:14"],"patternID":"PG12","ruleTree":[{"contents":{"tag":"Prepare"},"tag":"Constant"},[[{"contents":{"tag":"Prepare"},"tag":"Constant"},[[{"contents":{"tag":"Terminate"},"tag":"Constant"},[]],[{"contents":{"tag":"Split"},"tag":"Constant"},[[{"contents":{"tag":"Terminate"},"tag":"Constant"},[]],[{"contents":{"tag":"Terminate"},"tag":"Constant"},[]]]]]],[{"tag":"Hole"},[]]]],"sizeExpanded":7},{"definition":[2,{"contents":{"tag":"Split"},"tag":"Constant"},{"contents":[{"contents":{"tag":"Prepare"},"tag":"Constant"},["RG1",[{"contents":{"tag":"Terminate"},"tag":"Constant"}]]],"tag":"With"}],"dependenciesDirect":[],"dependentsDirect":["PG62","PG63","PG80"],"depths":[0.4,0.4,0.42857142857142855,0.5,0.5,0.42857142857142855,0.4444444444444444,0.4444444444444444,0.3333333333333333,0.5,0.42857142857142855,0.25],"globalFreq":12,"impact":18,"occuranceInCorpus":["(Valid)MozartK309:2M01:04","(Valid)SchubertN06M05:08","(Valid)SchubertN06M09:14","(Valid)SchubertN18M04:08","(Valid)SchubertN20M06:19","(Valid)SchumannN11M03:04"],"patternID":"PG14","ruleTree":[{"contents":{"tag":"Split"},"tag":"Constant"},[[{"tag":"Hole"},[]],[{"contents":{"tag":"Prepare"},"tag":"Constant"},[[{"contents":{"tag":"Terminate"},"tag":"Constant"},[]],[{"contents":{"tag":"Terminate"},"tag":"Constant"},[]]]]]],"sizeExpanded":5},{"definition":[2,{"contents":[{"contents":{"tag":"Split"},"tag":"Constant"},["RG1",[{"contents":[{"contents":{"tag":"Prepare"},"tag":"Constant"},["RG1",[{"contents":{"tag":"Terminate"},"tag":"Constant"}]]],"tag":"With"}]]],"tag":"With"},{"contents":[{"contents":{"tag":"Split"},"tag":"Constant"},["RG1",[{"contents":{"tag":"Terminate"},"tag":"Constant"}]]],"tag":"With"}],"dependenciesDirect":[],"dependentsDirect":["PG39"],"depths":[0.3333333333333333,0.3333333333333333,0.16666666666666666,0.16666666666666666,0.5,0.3333333333333333,0.42857142857142855,0.42857142857142855,0.4,0.3333333333333333,0.375,0.375],"globalFreq":12,"impact":8,"occuranceInCorpus":["(Valid)MozartK332:2M01:04","(Valid)SchumannN10M08:15"],"patternID":"PG15","ruleTree":[{"contents":{"tag":"Split"},"tag":"Constant"},[[{"contents":{"tag":"Prepare"},"tag":"Constant"},[[{"contents":{"tag":"Terminate"},"tag":"Constant"},[]],[{"contents":{"tag":"Terminate"},"tag":"Constant"},[]]]],[{"contents":{"tag":"Prepare"},"tag":"Constant"},[[{"contents":{"tag":"Terminate"},"tag":"Constant"},[]],[{"contents":{"tag":"Terminate"},"tag":"Constant"},[]]]]]],"sizeExpanded":7},{"definition":[1,{"contents":"PG7","tag":"Var"},{"contents":[{"contents":{"tag":"Split"},"tag":"Constant"},["RG1",[{"contents":{"tag":"Terminate"},"tag":"Constant"}]]],"tag":"With"}],"dependenciesDirect":["PG7"],"dependentsDirect":["PG89","PG92"],"depths":[0.5714285714285714,0.5714285714285714,0.7142857142857143,0.7142857142857143,0.6666666666666666,0.6666666666666666,0.6666666666666666,0.6666666666666666,0.6666666666666666],"globalFreq":9,"impact":7,"occuranceInCorpus":["(Valid)MozartK282:1M05:08","(Valid)SchubertN05M09:12","(Valid)SchubertN08M11:20","(Valid)SchumannN03M10:15"],"patternID":"PG16","ruleTree":[{"contents":{"tag":"Split"},"tag":"Constant"},[[{"contents":{"tag":"Split"},"tag":"Constant"},[[{"contents":{"tag":"Terminate"},"tag":"Constant"},[]],[{"contents":{"tag":"Terminate"},"tag":"Constant"},[]]]],[{"contents":{"tag":"Terminate"},"tag":"Constant"},[]]]],"sizeExpanded":5},{"definition":[2,{"contents":[{"contents":{"tag":"Split"},"tag":"Constant"},["RG1",[{"contents":{"tag":"Prepare"},"tag":"Constant"}]]],"tag":"With"},{"contents":{"tag":"Terminate"},"tag":"Constant"}],"dependenciesDirect":[],"dependentsDirect":["PG57"],"depths":[0.2857142857142857,0.2857142857142857,0.2857142857142857,0.3333333333333333,0.25,0.25,0.25,0.5,0.3333333333333333],"globalFreq":9,"impact":4,"occuranceInCorpus":["(Valid)MozartK310:2M01:04","(Valid)SchubertN03M08:15"],"patternID":"PG20","ruleTree":[{"contents":{"tag":"Split"},"tag":"Constant"},[[{"contents":{"tag":"Prepare"},"tag":"Constant"},[[{"tag":"Hole"},[]],[{"contents":{"tag":"Terminate"},"tag":"Constant"},[]]]],[{"contents":{"tag":"Prepare"},"tag":"Constant"},[[{"tag":"Hole"},[]],[{"tag":"Hole"},[]]]]]],"sizeExpanded":7},{"definition":[2,{"contents":"PG11","tag":"Var"},{"contents":[{"contents":{"tag":"Prepare"},"tag":"Constant"},["RG1",[{"contents":{"tag":"Terminate"},"tag":"Constant"}]]],"tag":"With"}],"dependenciesDirect":["PG11"],"dependentsDirect":["PG55","PG73"],"depths":[0,0,0.2857142857142857,0,0,0,0],"globalFreq":7,"impact":7,"occuranceInCorpus":["(Valid)SchubertN06M05:08","(Valid)SchubertN06M09:14","(Valid)SchubertN16M05:08","(Valid)SchumannN07M01:04"],"patternID":"PG21","ruleTree":[{"contents":{"tag":"Split"},"tag":"Constant"},[[{"contents":{"tag":"Split"},"tag":"Constant"},[[{"contents":{"tag":"Split"},"tag":"Constant"},[[{"tag":"Hole"},[]],[{"contents":{"tag":"Prepare"},"tag":"Constant"},[[{"contents":{"tag":"Terminate"},"tag":"Constant"},[]],[{"contents":{"tag":"Terminate"},"tag":"Constant"},[]]]]]],[{"contents":{"tag":"Split"},"tag":"Constant"},[[{"tag":"Hole"},[]],[{"tag":"Hole"},[]]]]]],[{"tag":"Hole"},[]]]],"sizeExpanded":11},{"definition":[2,{"contents":{"tag":"Prepare"},"tag":"Constant"},{"contents":[{"contents":{"tag":"Split"},"tag":"Constant"},["RG1",[{"contents":{"tag":"Terminate"},"tag":"Constant"}]]],"tag":"With"}],"dependenciesDirect":[],"dependentsDirect":[],"depths":[0.16666666666666666,0.16666666666666666,0.5714285714285714,0.5714285714285714,0.6,0.6,0.42857142857142855,0.42857142857142855,0.2857142857142857,0.2857142857142857],"globalFreq":10,"impact":0,"occuranceInCorpus":["(Valid)MozartK279:2M01:06","(Valid)SchubertN19M06:12","(Valid)SchubertN22M05:09"],"patternID":"PG22","ruleTree":[{"contents":{"tag":"Prepare"},"tag":"Constant"},[[{"tag":"Hole"},[]],[{"contents":{"tag":"Split"},"tag":"Constant"},[[{"contents":{"tag":"Terminate"},"tag":"Constant"},[]],[{"contents":{"tag":"Terminate"},"tag":"Constant"},[]]]]]],"sizeExpanded":5},{"definition":[2,{"contents":{"tag":"Split"},"tag":"Constant"},{"contents":[{"contents":{"tag":"Split"},"tag":"Constant"},["RG1",[{"contents":{"tag":"Terminate"},"tag":"Constant"}]]],"tag":"With"}],"dependenciesDirect":[],"dependentsDirect":["PG38"],"depths":[0.5714285714285714,0.5714285714285714,0.5714285714285714,0.5714285714285714,0.3333333333333333,0.3333333333333333,0.625,0.5],"globalFreq":8,"impact":8,"occuranceInCorpus":["(Valid)MozartK284:2M01:08","(Valid)MozartK457:2M01:03","(Valid)SchubertN01M08:11","(Valid)SchubertN12M07:10"],"patternID":"PG23","ruleTree":[{"contents":{"tag":"Split"},"tag":"Constant"},[[{"tag":"Hole"},[]],[{"contents":{"tag":"Split"},"tag":"Constant"},[[{"contents":{"tag":"Terminate"},"tag":"Constant"},[]],[{"contents":{"tag":"Terminate"},"tag":"Constant"},[]]]]]],"sizeExpanded":5},{"definition":[1,{"contents":"PG7","tag":"Var"},{"contents":[{"contents":{"tag":"Prepare"},"tag":"Constant"},["RG1",[{"contents":{"tag":"Terminate"},"tag":"Constant"}]]],"tag":"With"}],"dependenciesDirect":["PG7"],"dependentsDirect":["PG87"],"depths":[0.5,0.7142857142857143,0.7142857142857143,0.5714285714285714,0.5714285714285714,0.5,0.5],"globalFreq":7,"impact":2,"occuranceInCorpus":["(Valid)MozartK545:2M01:08","(Valid)SchubertN14M05:08"],"patternID":"PG24","ruleTree":[{"contents":{"tag":"Split"},"tag":"Constant"},[[{"contents":{"tag":"Prepare"},"tag":"Constant"},[[{"contents":{"tag":"Terminate"},"tag":"Constant"},[]],[{"contents":{"tag":"Terminate"},"tag":"Constant"},[]]]],[{"contents":{"tag":"Terminate"},"tag":"Constant"},[]]]],"sizeExpanded":5},{"definition":[1,{"contents":"PG3","tag":"Var"},{"contents":[{"contents":"PG4","tag":"Var"},["RG1",[{"contents":{"tag":"Terminate"},"tag":"Constant"}]]],"tag":"With"}],"dependenciesDirect":["PG3","PG4"],"dependentsDirect":["PG69"],"depths":[0.5,0.5,0.6666666666666666,0.6666666666666666,0.6,0.6,0.6,0.5714285714285714,0.5714285714285714,0.6666666666666666,0.6666666666666666,0.6666666666666666],"globalFreq":12,"impact":3,"occuranceInCorpus":["(Valid)SchubertN09M05:08","(Valid)SchumannN03M10:15"],"patternID":"PG25","ruleTree":[{"contents":{"tag":"Prepare"},"tag":"Constant"},[[{"contents":{"tag":"Terminate"},"tag":"Constant"},[]],[{"contents":{"tag":"Split"},"tag":"Constant"},[[{"contents":{"tag":"Terminate"},"tag":"Constant"},[]],[{"contents":{"tag":"Terminate"},"tag":"Constant"},[]],[{"contents":{"tag":"Terminate"},"tag":"Constant"},[]]]]]],"sizeExpanded":6},{"definition":[1,{"contents":"PG3","tag":"Var"},{"contents":"PG9","tag":"Var"}],"dependenciesDirect":["PG3","PG9"],"dependentsDirect":["PG63"],"depths":[0.42857142857142855,0.42857142857142855,0.5714285714285714,0.6666666666666666,0.6666666666666666,0.4444444444444444,0.4444444444444444,0.4444444444444444,0.5714285714285714,0.5,0.5],"globalFreq":11,"impact":4,"occuranceInCorpus":["(Valid)SchubertN06M05:08","(Valid)SchubertN06M09:14"],"patternID":"PG26","ruleTree":[{"contents":{"tag":"Prepare"},"tag":"Constant"},[[{"contents":{"tag":"Terminate"},"tag":"Constant"},[]],[{"contents":{"tag":"Respell"},"tag":"Constant"},[[{"contents":{"tag":"Split"},"tag":"Constant"},[[{"contents":{"tag":"Terminate"},"tag":"Constant"},[]],[{"contents":{"tag":"Terminate"},"tag":"Constant"},[]]]]]]]],"sizeExpanded":6},{"definition":[1,{"contents":{"contents":"Early","tag":"Shift"},"tag":"Constant"},{"contents":{"tag":"Terminate"},"tag":"Constant"}],"dependenciesDirect":[],"dependentsDirect":["PG42"],"depths":[0.6666666666666666,0.6666666666666666,0.5,0.5,0.8888888888888888,0.7777777777777778,0.7777777777777778,0.875],"globalFreq":8,"impact":4,"occuranceInCorpus":["(Valid)MozartK332:2M01:04","(Valid)SchumannN10M08:15"],"patternID":"PG27","ruleTree":[{"contents":{"contents":"Early","tag":"Shift"},"tag":"Constant"},[[{"contents":{"tag":"Terminate"},"tag":"Constant"},[]]]],"sizeExpanded":2},{"definition":[1,{"contents":{"tag":"Respell"},"tag":"Constant"},{"contents":{"tag":"Terminate"},"tag":"Constant"}],"dependenciesDirect":[],"dependentsDirect":[],"depths":[0.5714285714285714,0.5714285714285714,0.6666666666666666,0.6666666666666666,0.3333333333333333,0.3333333333333333,0.5,0.5,0.5,0.5,0.6666666666666666,0.6666666666666666,0.5,0.5],"globalFreq":14,"impact":0,"occuranceInCorpus":["(Valid)MozartK282:1M01:04","(Valid)MozartK310:2M01:04","(Valid)MozartK332:2M01:04","(Valid)MozartK457:2M01:03","(Valid)SchubertN01M08:11"],"patternID":"PG28","ruleTree":[{"contents":{"tag":"Respell"},"tag":"Constant"},[[{"contents":{"tag":"Terminate"},"tag":"Constant"},[]]]],"sizeExpanded":2},{"definition":[2,{"contents":[{"contents":{"tag":"Split"},"tag":"Constant"},["RG1",[{"contents":[{"contents":{"tag":"Prepare"},"tag":"Constant"},["RG1",[{"contents":{"tag":"Terminate"},"tag":"Constant"}]]],"tag":"With"}]]],"tag":"With"},{"contents":{"tag":"Terminate"},"tag":"Constant"}],"dependenciesDirect":[],"dependentsDirect":["PG37"],"depths":[0.25,0.5,0.3333333333333333,0.3333333333333333,0.4,0.2857142857142857,0.25],"globalFreq":7,"impact":10,"occuranceInCorpus":["(Valid)MozartK280:2M01:08","(Valid)SchubertN03M08:15","(Valid)SchumannN01M02:05","(Valid)SchumannN06M02:07","(Valid)SchumannN11M03:04"],"patternID":"PG29","ruleTree":[{"contents":{"tag":"Split"},"tag":"Constant"},[[{"contents":{"tag":"Prepare"},"tag":"Constant"},[[{"contents":{"tag":"Terminate"},"tag":"Constant"},[]],[{"contents":{"tag":"Terminate"},"tag":"Constant"},[]]]],[{"contents":{"tag":"Prepare"},"tag":"Constant"},[[{"contents":{"tag":"Terminate"},"tag":"Constant"},[]],[{"contents":{"tag":"Terminate"},"tag":"Constant"},[]]]]]],"sizeExpanded":7},{"definition":[1,{"contents":{"tag":"Prepare"},"tag":"Constant"},{"contents":{"tag":"Terminate"},"tag":"Constant"}],"dependenciesDirect":[],"dependentsDirect":["PG25","PG26","PG48","PG5","PG86","PG88","PG89"],"depths":[0.5,0.6666666666666666,0.4,0.4,0.5714285714285714,0.5714285714285714,0.5714285714285714,0.5714285714285714,0.5714285714285714,0.5714285714285714,0.5714285714285714,0.7142857142857143,0.5714285714285714,0.42857142857142855,0.5714285714285714,0.7142857142857143,0.7142857142857143,0.42857142857142855,0.42857142857142855,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5555555555555556,0.5555555555555556,0.75,0.7142857142857143,0.5714285714285714,0.5,0.5,0.5,0.5,0.6666666666666666,0.5,0.5,0.5,0.6,0.6,0.2,0.2857142857142857,0.42857142857142855,0.5714285714285714,0.5555555555555556,0.6666666666666666,0.4444444444444444,0.4444444444444444,0.4444444444444444,0.5714285714285714,0.5714285714285714,0.7142857142857143,0.7142857142857143,0.6,0.4,0.5714285714285714,0.7142857142857143,0.6,0.6666666666666666,0.5714285714285714,0.5714285714285714,0.42857142857142855,0.42857142857142855,0.5,0.6666666666666666,0.6666666666666666,0.6666666666666666,0.5,0.6666666666666666,0.5714285714285714,0.6,0.6666666666666666,0.5,0.75,0.5,0.625,0.625],"globalFreq":80,"impact":191,"occuranceInCorpus":["(Valid)MozartK282:1M01:04","(Valid)MozartK282:1M05:08","(Valid)MozartK283:2M01:04","(Valid)MozartK284:2M01:08","(Valid)MozartK310:2M01:04","(Valid)MozartK311:2M01:04","(Valid)MozartK457:2M01:03","(Valid)MozartK545:2M01:08","(Valid)MozartK570:2M01:04","(Valid)SchubertN01M08:11","(Valid)SchubertN05M09:12","(Valid)SchubertN06M05:08","(Valid)SchubertN06M09:14","(Valid)SchubertN08M11:20","(Valid)SchubertN09M05:08","(Valid)SchubertN09M09:14","(Valid)SchubertN10M07:15","(Valid)SchubertN12M07:10","(Valid)SchubertN16M05:08","(Valid)SchubertN22M05:09","(Valid)SchumannN03M10:15","(Valid)SchumannN06M02:07","(Valid)SchumannN07M01:04","(Valid)SchumannN12M02:09"],"patternID":"PG3","ruleTree":[{"contents":{"tag":"Prepare"},"tag":"Constant"},[[{"contents":{"tag":"Terminate"},"tag":"Constant"},[]],[{"tag":"Hole"},[]]]],"sizeExpanded":3},{"definition":[1,{"contents":"PG6","tag":"Var"},{"contents":[{"contents":{"tag":"Prepare"},"tag":"Constant"},["RG1",[{"contents":{"tag":"Terminate"},"tag":"Constant"}]]],"tag":"With"}],"dependenciesDirect":["PG6"],"dependentsDirect":[],"depths":[0.75,0.75,0.75,0.75,0.375,0.375,0.5,0.5,0.5,0.5,0.5,0.5],"globalFreq":12,"impact":0,"occuranceInCorpus":["(Valid)MozartK280:2M01:08","(Valid)SchumannN04M01:04","(Valid)SchumannN11M03:04"],"patternID":"PG30","ruleTree":[{"contents":{"tag":"Prepare"},"tag":"Constant"},[[{"contents":{"tag":"Prepare"},"tag":"Constant"},[[{"contents":{"tag":"Terminate"},"tag":"Constant"},[]],[{"contents":{"tag":"Terminate"},"tag":"Constant"},[]]]],[{"contents":{"tag":"Terminate"},"tag":"Constant"},[]]]],"sizeExpanded":5},{"definition":[1,{"contents":"PG4","tag":"Var"},{"contents":"PG10","tag":"Var"}],"dependenciesDirect":["PG10","PG4"],"dependentsDirect":["PG64"],"depths":[0.5714285714285714,0.5714285714285714,0.5,0.5,0.5,0.25,0.25,0.5,0.5],"globalFreq":9,"impact":4,"occuranceInCorpus":["(Valid)MozartK282:1M05:08","(Valid)MozartK310:2M01:04"],"patternID":"PG31","ruleTree":[{"contents":{"tag":"Split"},"tag":"Constant"},[[{"contents":{"tag":"Terminate"},"tag":"Constant"},[]],[{"contents":{"tag":"Prepare"},"tag":"Constant"},[[{"contents":{"tag":"Split"},"tag":"Constant"},[[{"contents":{"tag":"Terminate"},"tag":"Constant"},[]],[{"contents":{"tag":"Terminate"},"tag":"Constant"},[]]]],[{"contents":{"tag":"Terminate"},"tag":"Constant"},[]]]]]],"sizeExpanded":7},{"definition":[8,{"contents":[{"contents":{"tag":"Split"},"tag":"Constant"},["RG1",[{"contents":[{"contents":{"tag":"Split"},"tag":"Constant"},["RG2",[]]],"tag":"With"}]]],"tag":"With"},{"contents":[{"contents":{"tag":"Split"},"tag":"Constant"},["RG1",[{"contents":{"tag":"Terminate"},"tag":"Constant"}]]],"tag":"With"}],"dependenciesDirect":[],"dependentsDirect":["PG70"],"depths":[0,0,0,0,0,0,0],"globalFreq":7,"impact":2,"occuranceInCorpus":["(Valid)SchubertN02M06:09","(Valid)SchubertN15M06:09"],"patternID":"PG34","ruleTree":[{"contents":{"tag":"Split"},"tag":"Constant"},[[{"contents":{"tag":"Split"},"tag":"Constant"},[[{"contents":{"tag":"Split"},"tag":"Constant"},[[{"tag":"Hole"},[]],[{"tag":"Hole"},[]]]],[{"contents":{"tag":"Split"},"tag":"Constant"},[[{"tag":"Hole"},[]],[{"tag":"Hole"},[]]]]]],[{"contents":{"tag":"Split"},"tag":"Constant"},[[{"contents":{"tag":"Split"},"tag":"Constant"},[[{"tag":"Hole"},[]],[{"tag":"Hole"},[]]]],[{"contents":{"tag":"Split"},"tag":"Constant"},[[{"tag":"Hole"},[]],[{"contents":{"tag":"Split"},"tag":"Constant"},[[{"contents":{"tag":"Terminate"},"tag":"Constant"},[]],[{"contents":{"tag":"Terminate"},"tag":"Constant"},[]]]]]]]]]],"sizeExpanded":17},{"definition":[1,{"contents":[{"contents":{"tag":"Split"},"tag":"Constant"},["RG1",[{"contents":{"tag":"Prepare"},"tag":"Constant"}]]],"tag":"With"},{"contents":{"tag":"Terminate"},"tag":"Constant"}],"dependenciesDirect":[],"dependentsDirect":["PG54"],"depths":[0.16666666666666666,0.2,0.2,0.16666666666666666,0.16666666666666666,0.16666666666666666,0.375],"globalFreq":7,"impact":6,"occuranceInCorpus":["(Valid)SchubertN01M08:11","(Valid)SchubertN12M07:10","(Valid)SchumannN10M08:15"],"patternID":"PG35","ruleTree":[{"contents":{"tag":"Split"},"tag":"Constant"},[[{"contents":{"tag":"Prepare"},"tag":"Constant"},[[{"contents":{"tag":"Terminate"},"tag":"Constant"},[]],[{"tag":"Hole"},[]]]],[{"contents":{"tag":"Prepare"},"tag":"Constant"},[[{"tag":"Hole"},[]],[{"tag":"Hole"},[]]]]]],"sizeExpanded":7},{"definition":[1,{"contents":"PG6","tag":"Var"},{"contents":"PG5","tag":"Var"}],"dependenciesDirect":["PG5","PG6"],"dependentsDirect":[],"depths":[0.42857142857142855,0.42857142857142855,0.5714285714285714,0.5714285714285714,0.625,0.625],"globalFreq":6,"impact":0,"occuranceInCorpus":["(Valid)MozartK283:2M01:04","(Valid)SchubertN16M05:08","(Valid)SchumannN12M02:09"],"patternID":"PG36","ruleTree":[{"contents":{"tag":"Prepare"},"tag":"Constant"},[[{"contents":{"tag":"Prepare"},"tag":"Constant"},[[{"contents":{"tag":"Terminate"},"tag":"Constant"},[]],[{"contents":{"tag":"Split"},"tag":"Constant"},[[{"contents":{"tag":"Terminate"},"tag":"Constant"},[]],[{"contents":{"tag":"Terminate"},"tag":"Constant"},[]]]]]],[{"contents":{"tag":"Terminate"},"tag":"Constant"},[]]]],"sizeExpanded":7},{"definition":[1,{"contents":"PG29","tag":"Var"},{"contents":[{"contents":{"tag":"Split"},"tag":"Constant"},["RG1",[{"contents":{"tag":"Terminate"},"tag":"Constant"}]]],"tag":"With"}],"dependenciesDirect":["PG29"],"dependentsDirect":[],"depths":[0.25,0.25,0.5,0.5,0.4,0.4,0.2857142857142857,0.2857142857142857,0.25,0.25],"globalFreq":10,"impact":0,"occuranceInCorpus":["(Valid)MozartK280:2M01:08","(Valid)SchubertN03M08:15","(Valid)SchumannN01M02:05","(Valid)SchumannN06M02:07","(Valid)SchumannN11M03:04"],"patternID":"PG37","ruleTree":[{"contents":{"tag":"Split"},"tag":"Constant"},[[{"contents":{"tag":"Prepare"},"tag":"Constant"},[[{"contents":{"tag":"Terminate"},"tag":"Constant"},[]],[{"contents":{"tag":"Terminate"},"tag":"Constant"},[]]]],[{"contents":{"tag":"Prepare"},"tag":"Constant"},[[{"contents":{"tag":"Terminate"},"tag":"Constant"},[]],[{"contents":{"tag":"Terminate"},"tag":"Constant"},[]]]]]],"sizeExpanded":7},{"definition":[1,{"contents":"PG23","tag":"Var"},{"contents":"PG5","tag":"Var"}],"dependenciesDirect":["PG23","PG5"],"dependentsDirect":[],"depths":[0.5714285714285714,0.5714285714285714,0.5714285714285714,0.5714285714285714,0.625,0.625,0.5,0.5],"globalFreq":8,"impact":0,"occuranceInCorpus":["(Valid)MozartK284:2M01:08","(Valid)MozartK457:2M01:03","(Valid)SchubertN01M08:11","(Valid)SchubertN12M07:10"],"patternID":"PG38","ruleTree":[{"contents":{"tag":"Split"},"tag":"Constant"},[[{"contents":{"tag":"Prepare"},"tag":"Constant"},[[{"contents":{"tag":"Terminate"},"tag":"Constant"},[]],[{"contents":{"tag":"Split"},"tag":"Constant"},[[{"contents":{"tag":"Terminate"},"tag":"Constant"},[]],[{"contents":{"tag":"Terminate"},"tag":"Constant"},[]]]]]],[{"contents":{"tag":"Split"},"tag":"Constant"},[[{"contents":{"tag":"Terminate"},"tag":"Constant"},[]],[{"contents":{"tag":"Terminate"},"tag":"Constant"},[]]]]]],"sizeExpanded":9},{"definition":[1,{"contents":"PG15","tag":"Var"},{"contents":{"tag":"Terminate"},"tag":"Constant"}],"dependenciesDirect":["PG15"],"dependentsDirect":["PG75"],"depths":[0.3333333333333333,0.3333333333333333,0.3333333333333333,0.4,0.4,0.375,0.375,0.375],"globalFreq":8,"impact":4,"occuranceInCorpus":["(Valid)MozartK332:2M01:04","(Valid)SchumannN10M08:15"],"patternID":"PG39","ruleTree":[{"contents":{"tag":"Split"},"tag":"Constant"},[[{"contents":{"tag":"Prepare"},"tag":"Constant"},[[{"contents":{"tag":"Terminate"},"tag":"Constant"},[]],[{"contents":{"tag":"Terminate"},"tag":"Constant"},[]]]],[{"contents":{"tag":"Prepare"},"tag":"Constant"},[[{"contents":{"tag":"Terminate"},"tag":"Constant"},[]],[{"contents":{"tag":"Terminate"},"tag":"Constant"},[]]]]]],"sizeExpanded":7},{"definition":[1,{"contents":{"tag":"Split"},"tag":"Constant"},{"contents":{"tag":"Terminate"},"tag":"Constant"}],"dependenciesDirect":[],"dependentsDirect":["PG25","PG31","PG46","PG47","PG8","PG86","PG87","PG91"],"depths":[0.5,0.5,0.6666666666666666,0.6666666666666666,0.6666666666666666,0.8333333333333334,0.6666666666666666,0.625,0.75,0.25,0.25,0.6,0.7142857142857143,0.7142857142857143,0.5714285714285714,0.5714285714285714,0.5714285714285714,0.2857142857142857,0.2857142857142857,0.5,0.6666666666666666,0.6666666666666666,0.5,0.5,0.5,0.5,0.4,0.6666666666666666,0.5555555555555556,0.5555555555555556,0.3333333333333333,0.6666666666666666,0.5714285714285714,0.42857142857142855,0.5714285714285714,0.5,0.5,0.25,0.6,0.6,0.8,0.5,0.4,0.42857142857142855,0.8,0.6,0.6,0.4,0.42857142857142855,0.7142857142857143,0.125,0.2857142857142857,0.2857142857142857,0.6666666666666666,0.8333333333333334,0.8333333333333334,0.5,0.42857142857142855,0.375,0.625,0.375,0.375,0.375,0.25,0.25],"globalFreq":65,"impact":213,"occuranceInCorpus":["(Valid)MozartK279:2M01:06","(Valid)MozartK282:1M01:04","(Valid)MozartK282:1M05:08","(Valid)MozartK283:2M01:04","(Valid)MozartK309:2M01:04","(Valid)MozartK310:2M01:04","(Valid)MozartK330:2M01:04","(Valid)MozartK332:2M01:04","(Valid)MozartK545:2M01:08","(Valid)MozartK570:2M01:04","(Valid)SchubertN09M05:08","(Valid)SchubertN14M05:08","(Valid)SchubertN20M06:19","(Valid)SchumannN03M10:15","(Valid)SchumannN06M02:07","(Valid)SchumannN10M08:15"],"patternID":"PG4","ruleTree":[{"contents":{"tag":"Split"},"tag":"Constant"},[[{"contents":{"tag":"Terminate"},"tag":"Constant"},[]],[{"tag":"Hole"},[]]]],"sizeExpanded":3},{"definition":[1,{"contents":"PG12","tag":"Var"},{"contents":[{"contents":{"tag":"Split"},"tag":"Constant"},["RG1",[{"contents":{"tag":"Terminate"},"tag":"Constant"}]]],"tag":"With"}],"dependenciesDirect":["PG12"],"dependentsDirect":["PG67"],"depths":[0.42857142857142855,0.42857142857142855,0.2857142857142857,0.2857142857142857,0.5,0.5,0.5,0.5],"globalFreq":8,"impact":3,"occuranceInCorpus":["(Valid)MozartK282:1M05:08","(Valid)SchubertN08M11:20"],"patternID":"PG40","ruleTree":[{"contents":{"tag":"Prepare"},"tag":"Constant"},[[{"contents":{"tag":"Prepare"},"tag":"Constant"},[[{"contents":{"tag":"Terminate"},"tag":"Constant"},[]],[{"contents":{"tag":"Split"},"tag":"Constant"},[[{"contents":{"tag":"Terminate"},"tag":"Constant"},[]],[{"contents":{"tag":"Terminate"},"tag":"Constant"},[]]]]]],[{"contents":{"tag":"Split"},"tag":"Constant"},[[{"contents":{"tag":"Terminate"},"tag":"Constant"},[]],[{"contents":{"tag":"Terminate"},"tag":"Constant"},[]]]]]],"sizeExpanded":9},{"definition":[1,{"contents":{"tag":"Prepare"},"tag":"Constant"},{"contents":[{"contents":[{"contents":{"tag":"Prepare"},"tag":"Constant"},["RG1",[{"contents":[{"contents":{"tag":"Split"},"tag":"Constant"},["RG1",[{"contents":{"tag":"Terminate"},"tag":"Constant"}]]],"tag":"With"}]]],"tag":"With"},["RG1",[{"contents":[{"contents":{"tag":"Split"},"tag":"Constant"},["RG1",[{"contents":{"tag":"Terminate"},"tag":"Constant"}]]],"tag":"With"}]]],"tag":"With"}],"dependenciesDirect":[],"dependentsDirect":["PG85"],"depths":[0.3333333333333333,0.3333333333333333,0.3333333333333333,0.3333333333333333,0.42857142857142855,0.42857142857142855],"globalFreq":6,"impact":4,"occuranceInCorpus":["(Valid)MozartK310:2M01:04","(Valid)MozartK332:2M01:04"],"patternID":"PG41","ruleTree":[{"contents":{"tag":"Prepare"},"tag":"Constant"},[[{"contents":{"tag":"Prepare"},"tag":"Constant"},[[{"contents":{"tag":"Split"},"tag":"Constant"},[[{"contents":{"tag":"Terminate"},"tag":"Constant"},[]],[{"contents":{"tag":"Terminate"},"tag":"Constant"},[]]]],[{"contents":{"tag":"Split"},"tag":"Constant"},[[{"contents":{"tag":"Terminate"},"tag":"Constant"},[]],[{"contents":{"tag":"Terminate"},"tag":"Constant"},[]]]]]],[{"tag":"Hole"},[]]]],"sizeExpanded":9},{"definition":[1,{"contents":{"tag":"Respell"},"tag":"Constant"},{"contents":"PG27","tag":"Var"}],"dependenciesDirect":["PG27"],"dependentsDirect":["PG47"],"depths":[0.7777777777777778,0.6666666666666666,0.6666666666666666,0.75],"globalFreq":4,"impact":8,"occuranceInCorpus":["(Valid)MozartK332:2M01:04","(Valid)SchumannN10M08:15"],"patternID":"PG42","ruleTree":[{"contents":{"tag":"Respell"},"tag":"Constant"},[[{"contents":{"contents":"Early","tag":"Shift"},"tag":"Constant"},[[{"contents":{"tag":"Terminate"},"tag":"Constant"},[]]]]]],"sizeExpanded":3},{"definition":[8,{"contents":[{"contents":{"tag":"Split"},"tag":"Constant"},["RG1",[{"contents":[{"contents":{"tag":"Split"},"tag":"Constant"},["RG2",[]]],"tag":"With"}]]],"tag":"With"},{"contents":{"tag":"Terminate"},"tag":"Constant"}],"dependenciesDirect":[],"dependentsDirect":["PG45"],"depths":[0,0,0,0],"globalFreq":4,"impact":6,"occuranceInCorpus":["(Valid)MozartK282:1M01:04","(Valid)SchubertN19M06:12"],"patternID":"PG43","ruleTree":[{"contents":{"tag":"Split"},"tag":"Constant"},[[{"contents":{"tag":"Split"},"tag":"Constant"},[[{"contents":{"tag":"Split"},"tag":"Constant"},[[{"tag":"Hole"},[]],[{"tag":"Hole"},[]]]],[{"contents":{"tag":"Split"},"tag":"Constant"},[[{"tag":"Hole"},[]],[{"tag":"Hole"},[]]]]]],[{"contents":{"tag":"Split"},"tag":"Constant"},[[{"contents":{"tag":"Split"},"tag":"Constant"},[[{"tag":"Hole"},[]],[{"tag":"Hole"},[]]]],[{"contents":{"tag":"Split"},"tag":"Constant"},[[{"tag":"Hole"},[]],[{"contents":{"tag":"Terminate"},"tag":"Constant"},[]]]]]]]],"sizeExpanded":15},{"definition":[3,{"contents":[{"contents":{"tag":"Split"},"tag":"Constant"},["RG2",[]]],"tag":"With"},{"contents":{"tag":"Terminate"},"tag":"Constant"}],"dependenciesDirect":[],"dependentsDirect":[],"depths":[0.2857142857142857,0.2857142857142857,0.2857142857142857,0,0,0,0],"globalFreq":7,"impact":0,"occuranceInCorpus":["(Valid)MozartK283:2M01:04","(Valid)SchubertN10M07:15","(Valid)SchubertN22M05:09"],"patternID":"PG44","ruleTree":[{"contents":{"tag":"Split"},"tag":"Constant"},[[{"contents":{"tag":"Split"},"tag":"Constant"},[[{"tag":"Hole"},[]],[{"tag":"Hole"},[]]]],[{"contents":{"tag":"Split"},"tag":"Constant"},[[{"contents":{"tag":"Terminate"},"tag":"Constant"},[]],[{"tag":"Hole"},[]]]]]],"sizeExpanded":7},{"definition":[2,{"contents":"PG43","tag":"Var"},{"contents":[{"contents":{"tag":"Prepare"},"tag":"Constant"},["RG1",[{"contents":{"tag":"Terminate"},"tag":"Constant"}]]],"tag":"With"}],"dependenciesDirect":["PG43"],"dependentsDirect":["PG68"],"depths":[0,0,0,0,0,0],"globalFreq":6,"impact":4,"occuranceInCorpus":["(Valid)MozartK282:1M01:04","(Valid)SchubertN19M06:12"],"patternID":"PG45","ruleTree":[{"contents":{"tag":"Split"},"tag":"Constant"},[[{"contents":{"tag":"Split"},"tag":"Constant"},[[{"contents":{"tag":"Split"},"tag":"Constant"},[[{"tag":"Hole"},[]],[{"contents":{"tag":"Prepare"},"tag":"Constant"},[[{"contents":{"tag":"Terminate"},"tag":"Constant"},[]],[{"contents":{"tag":"Terminate"},"tag":"Constant"},[]]]]]],[{"contents":{"tag":"Split"},"tag":"Constant"},[[{"tag":"Hole"},[]],[{"tag":"Hole"},[]]]]]],[{"contents":{"tag":"Split"},"tag":"Constant"},[[{"contents":{"tag":"Split"},"tag":"Constant"},[[{"tag":"Hole"},[]],[{"tag":"Hole"},[]]]],[{"contents":{"tag":"Split"},"tag":"Constant"},[[{"tag":"Hole"},[]],[{"contents":{"tag":"Terminate"},"tag":"Constant"},[]]]]]]]],"sizeExpanded":17},{"definition":[1,{"contents":"PG4","tag":"Var"},{"contents":[{"contents":{"tag":"Split"},"tag":"Constant"},["RG1",[{"contents":{"tag":"Terminate"},"tag":"Constant"}]]],"tag":"With"}],"dependenciesDirect":["PG4"],"dependentsDirect":[],"depths":[0.6666666666666666,0.6666666666666666,0.7142857142857143,0.7142857142857143,0.5,0.5],"globalFreq":6,"impact":0,"occuranceInCorpus":["(Valid)MozartK279:2M01:06","(Valid)MozartK282:1M01:04","(Valid)MozartK330:2M01:04"],"patternID":"PG46","ruleTree":[{"contents":{"tag":"Split"},"tag":"Constant"},[[{"contents":{"tag":"Terminate"},"tag":"Constant"},[]],[{"contents":{"tag":"Split"},"tag":"Constant"},[[{"contents":{"tag":"Terminate"},"tag":"Constant"},[]],[{"contents":{"tag":"Terminate"},"tag":"Constant"},[]]]]]],"sizeExpanded":5},{"definition":[1,{"contents":"PG4","tag":"Var"},{"contents":"PG42","tag":"Var"}],"dependenciesDirect":["PG4","PG42"],"dependentsDirect":[],"depths":[0.6666666666666666,0.6666666666666666,0.5555555555555556,0.5555555555555556,0.5555555555555556,0.5555555555555556,0.625,0.625],"globalFreq":8,"impact":0,"occuranceInCorpus":["(Valid)MozartK332:2M01:04","(Valid)SchumannN10M08:15"],"patternID":"PG47","ruleTree":[{"contents":{"tag":"Split"},"tag":"Constant"},[[{"contents":{"tag":"Terminate"},"tag":"Constant"},[]],[{"contents":{"tag":"Respell"},"tag":"Constant"},[[{"contents":{"contents":"Early","tag":"Shift"},"tag":"Constant"},[[{"contents":{"tag":"Terminate"},"tag":"Constant"},[]]]]]]]],"sizeExpanded":5},{"definition":[1,{"contents":"PG3","tag":"Var"},{"contents":[{"contents":{"tag":"Split"},"tag":"Constant"},["RG1",[{"contents":[{"contents":{"tag":"Split"},"tag":"Constant"},["RG1",[{"contents":{"tag":"Terminate"},"tag":"Constant"}]]],"tag":"With"}]]],"tag":"With"}],"dependenciesDirect":["PG3"],"dependentsDirect":[],"depths":[0.5,0.5,0.42857142857142855,0.42857142857142855],"globalFreq":4,"impact":0,"occuranceInCorpus":["(Valid)MozartK311:2M01:04","(Valid)SchubertN22M05:09"],"patternID":"PG48","ruleTree":[{"contents":{"tag":"Prepare"},"tag":"Constant"},[[{"contents":{"tag":"Terminate"},"tag":"Constant"},[]],[{"contents":{"tag":"Split"},"tag":"Constant"},[[{"contents":{"tag":"Split"},"tag":"Constant"},[[{"contents":{"tag":"Terminate"},"tag":"Constant"},[]],[{"contents":{"tag":"Terminate"},"tag":"Constant"},[]]]],[{"contents":{"tag":"Split"},"tag":"Constant"},[[{"contents":{"tag":"Terminate"},"tag":"Constant"},[]],[{"contents":{"tag":"Terminate"},"tag":"Constant"},[]]]]]]]],"sizeExpanded":9},{"definition":[1,{"contents":{"tag":"Split"},"tag":"Constant"},{"contents":[{"contents":{"tag":"Split"},"tag":"Constant"},["RG1",[{"contents":[{"contents":{"tag":"Prepare"},"tag":"Constant"},["RG1",[{"contents":{"tag":"Terminate"},"tag":"Constant"}]]],"tag":"With"}]]],"tag":"With"}],"dependenciesDirect":[],"dependentsDirect":[],"depths":[0,0,0.42857142857142855,0.42857142857142855,0.2857142857142857,0.2857142857142857],"globalFreq":6,"impact":0,"occuranceInCorpus":["(Valid)SchubertN05M21:24","(Valid)SchubertN10M07:15"],"patternID":"PG49","ruleTree":[{"contents":{"tag":"Split"},"tag":"Constant"},[[{"contents":{"tag":"Split"},"tag":"Constant"},[[{"contents":{"tag":"Prepare"},"tag":"Constant"},[[{"contents":{"tag":"Terminate"},"tag":"Constant"},[]],[{"contents":{"tag":"Terminate"},"tag":"Constant"},[]]]],[{"contents":{"tag":"Prepare"},"tag":"Constant"},[[{"contents":{"tag":"Terminate"},"tag":"Constant"},[]],[{"contents":{"tag":"Terminate"},"tag":"Constant"},[]]]]]],[{"tag":"Hole"},[]]]],"sizeExpanded":9},{"definition":[1,{"contents":"PG3","tag":"Var"},{"contents":[{"contents":{"tag":"Split"},"tag":"Constant"},["RG1",[{"contents":{"tag":"Terminate"},"tag":"Constant"}]]],"tag":"With"}],"dependenciesDirect":["PG3"],"dependentsDirect":["PG12","PG36","PG38","PG61"],"depths":[0.5714285714285714,0.5714285714285714,0.5714285714285714,0.5714285714285714,0.5714285714285714,0.5714285714285714,0.7142857142857143,0.5714285714285714,0.5714285714285714,0.5714285714285714,0.7142857142857143,0.7142857142857143,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.75,0.7142857142857143,0.7142857142857143,0.5714285714285714,0.5,0.5,0.5,0.5,0.5,0.6666666666666666,0.5,0.5,0.6,0.6,0.2,0.2,0.2857142857142857,0.4444444444444444,0.4444444444444444,0.5714285714285714,0.5714285714285714,0.7142857142857143,0.7142857142857143,0.5714285714285714,0.7142857142857143,0.6,0.6,0.6666666666666666,0.6666666666666666,0.42857142857142855,0.6666666666666666,0.6666666666666666,0.6,0.6666666666666666,0.6666666666666666,0.5,0.75,0.5,0.5,0.625,0.625],"globalFreq":66,"impact":70,"occuranceInCorpus":["(Valid)MozartK282:1M01:04","(Valid)MozartK282:1M05:08","(Valid)MozartK283:2M01:04","(Valid)MozartK284:2M01:08","(Valid)MozartK310:2M01:04","(Valid)MozartK457:2M01:03","(Valid)MozartK545:2M01:08","(Valid)MozartK570:2M01:04","(Valid)SchubertN01M08:11","(Valid)SchubertN08M11:20","(Valid)SchubertN09M09:14","(Valid)SchubertN10M07:15","(Valid)SchubertN12M07:10","(Valid)SchubertN16M05:08","(Valid)SchumannN07M01:04","(Valid)SchumannN12M02:09"],"patternID":"PG5","ruleTree":[{"contents":{"tag":"Prepare"},"tag":"Constant"},[[{"contents":{"tag":"Terminate"},"tag":"Constant"},[]],[{"contents":{"tag":"Split"},"tag":"Constant"},[[{"contents":{"tag":"Terminate"},"tag":"Constant"},[]],[{"contents":{"tag":"Terminate"},"tag":"Constant"},[]]]]]],"sizeExpanded":5},{"definition":[6,{"contents":[{"contents":{"tag":"Split"},"tag":"Constant"},["RG13",[{"contents":[{"contents":{"tag":"Split"},"tag":"Constant"},["RG1",[{"contents":{"tag":"Prepare"},"tag":"Constant"}]]],"tag":"With"}]]],"tag":"With"},{"contents":[{"contents":{"tag":"Split"},"tag":"Constant"},["RG1",[{"contents":{"tag":"Terminate"},"tag":"Constant"}]]],"tag":"With"}],"dependenciesDirect":[],"dependentsDirect":["PG69"],"depths":[0.1111111111111111,0.1111111111111111,0,0.16666666666666666],"globalFreq":4,"impact":3,"occuranceInCorpus":["(Valid)SchubertN09M05:08","(Valid)SchumannN03M10:15"],"patternID":"PG51","ruleTree":[{"contents":{"tag":"Split"},"tag":"Constant"},[[{"contents":{"tag":"Split"},"tag":"Constant"},[[{"tag":"Hole"},[]],[{"tag":"Hole"},[]]]],[{"contents":{"tag":"Split"},"tag":"Constant"},[[{"contents":{"tag":"Prepare"},"tag":"Constant"},[[{"tag":"Hole"},[]],[{"tag":"Hole"},[]]]],[{"contents":{"tag":"Prepare"},"tag":"Constant"},[[{"tag":"Hole"},[]],[{"contents":{"tag":"Split"},"tag":"Constant"},[[{"contents":{"tag":"Terminate"},"tag":"Constant"},[]],[{"contents":{"tag":"Terminate"},"tag":"Constant"},[]]]]]]]]]],"sizeExpanded":13},{"definition":[4,{"contents":"PG11","tag":"Var"},{"contents":{"tag":"Terminate"},"tag":"Constant"}],"dependenciesDirect":["PG11"],"dependentsDirect":[],"depths":[0,0,0,0.125,0.125],"globalFreq":5,"impact":0,"occuranceInCorpus":["(Valid)SchubertN13M10:25","(Valid)SchubertN20M06:19","(Valid)SchumannN12M02:09"],"patternID":"PG52","ruleTree":[{"contents":{"tag":"Split"},"tag":"Constant"},[[{"contents":{"tag":"Split"},"tag":"Constant"},[[{"contents":{"tag":"Split"},"tag":"Constant"},[[{"tag":"Hole"},[]],[{"tag":"Hole"},[]]]],[{"contents":{"tag":"Split"},"tag":"Constant"},[[{"tag":"Hole"},[]],[{"contents":{"tag":"Terminate"},"tag":"Constant"},[]]]]]],[{"tag":"Hole"},[]]]],"sizeExpanded":9},{"definition":[3,{"contents":"PG35","tag":"Var"},{"contents":[{"contents":{"tag":"Split"},"tag":"Constant"},["RG1",[{"contents":{"tag":"Terminate"},"tag":"Constant"}]]],"tag":"With"}],"dependenciesDirect":["PG35"],"dependentsDirect":[],"depths":[0.16666666666666666,0.16666666666666666,0.16666666666666666,0.16666666666666666,0.375,0.375],"globalFreq":6,"impact":0,"occuranceInCorpus":["(Valid)SchubertN01M08:11","(Valid)SchubertN12M07:10","(Valid)SchumannN10M08:15"],"patternID":"PG54","ruleTree":[{"contents":{"tag":"Split"},"tag":"Constant"},[[{"contents":{"tag":"Prepare"},"tag":"Constant"},[[{"contents":{"tag":"Terminate"},"tag":"Constant"},[]],[{"tag":"Hole"},[]]]],[{"contents":{"tag":"Prepare"},"tag":"Constant"},[[{"tag":"Hole"},[]],[{"contents":{"tag":"Split"},"tag":"Constant"},[[{"contents":{"tag":"Terminate"},"tag":"Constant"},[]],[{"contents":{"tag":"Terminate"},"tag":"Constant"},[]]]]]]]],"sizeExpanded":9},{"definition":[3,{"contents":"PG21","tag":"Var"},{"contents":[{"contents":{"tag":"Prepare"},"tag":"Constant"},["RG1",[{"contents":{"tag":"Terminate"},"tag":"Constant"}]]],"tag":"With"}],"dependenciesDirect":["PG21"],"dependentsDirect":["PG78"],"depths":[0,0,0],"globalFreq":3,"impact":2,"occuranceInCorpus":["(Valid)SchubertN16M05:08","(Valid)SchumannN07M01:04"],"patternID":"PG55","ruleTree":[{"contents":{"tag":"Split"},"tag":"Constant"},[[{"contents":{"tag":"Split"},"tag":"Constant"},[[{"contents":{"tag":"Split"},"tag":"Constant"},[[{"tag":"Hole"},[]],[{"contents":{"tag":"Prepare"},"tag":"Constant"},[[{"contents":{"tag":"Terminate"},"tag":"Constant"},[]],[{"contents":{"tag":"Terminate"},"tag":"Constant"},[]]]]]],[{"contents":{"tag":"Split"},"tag":"Constant"},[[{"tag":"Hole"},[]],[{"contents":{"tag":"Prepare"},"tag":"Constant"},[[{"contents":{"tag":"Terminate"},"tag":"Constant"},[]],[{"contents":{"tag":"Terminate"},"tag":"Constant"},[]]]]]]]],[{"tag":"Hole"},[]]]],"sizeExpanded":13},{"definition":[3,{"contents":"PG20","tag":"Var"},{"contents":[{"contents":{"tag":"Split"},"tag":"Constant"},["RG1",[{"contents":{"tag":"Terminate"},"tag":"Constant"}]]],"tag":"With"}],"dependenciesDirect":["PG20"],"dependentsDirect":["PG77"],"depths":[0.3333333333333333,0.5,0.3333333333333333,0.3333333333333333],"globalFreq":4,"impact":4,"occuranceInCorpus":["(Valid)MozartK310:2M01:04","(Valid)SchubertN03M08:15"],"patternID":"PG57","ruleTree":[{"contents":{"tag":"Split"},"tag":"Constant"},[[{"contents":{"tag":"Prepare"},"tag":"Constant"},[[{"tag":"Hole"},[]],[{"contents":{"tag":"Terminate"},"tag":"Constant"},[]]]],[{"contents":{"tag":"Prepare"},"tag":"Constant"},[[{"tag":"Hole"},[]],[{"contents":{"tag":"Split"},"tag":"Constant"},[[{"contents":{"tag":"Terminate"},"tag":"Constant"},[]],[{"contents":{"tag":"Terminate"},"tag":"Constant"},[]]]]]]]],"sizeExpanded":9},{"definition":[3,{"contents":"PG11","tag":"Var"},{"contents":{"tag":"Terminate"},"tag":"Constant"}],"dependenciesDirect":["PG11"],"dependentsDirect":["PG84"],"depths":[0,0,0,0],"globalFreq":4,"impact":4,"occuranceInCorpus":["(Valid)MozartK331:1M01:04","(Valid)MozartK545:2M01:08"],"patternID":"PG58","ruleTree":[{"contents":{"tag":"Split"},"tag":"Constant"},[[{"contents":{"tag":"Split"},"tag":"Constant"},[[{"contents":{"tag":"Split"},"tag":"Constant"},[[{"tag":"Hole"},[]],[{"tag":"Hole"},[]]]],[{"contents":{"tag":"Split"},"tag":"Constant"},[[{"contents":{"tag":"Terminate"},"tag":"Constant"},[]],[{"tag":"Hole"},[]]]]]],[{"tag":"Hole"},[]]]],"sizeExpanded":9},{"definition":[1,{"contents":[{"contents":{"tag":"Prepare"},"tag":"Constant"},["RG1",[{"contents":[{"contents":{"tag":"Split"},"tag":"Constant"},["RG1",[{"contents":{"tag":"Terminate"},"tag":"Constant"}]]],"tag":"With"}]]],"tag":"With"},{"contents":{"tag":"Terminate"},"tag":"Constant"}],"dependenciesDirect":[],"dependentsDirect":[],"depths":[0.375,0.375,0.5714285714285714,0.42857142857142855],"globalFreq":4,"impact":0,"occuranceInCorpus":["(Valid)MozartK457:2M01:03"],"patternID":"PG59","ruleTree":[{"contents":{"tag":"Prepare"},"tag":"Constant"},[[{"contents":{"tag":"Split"},"tag":"Constant"},[[{"contents":{"tag":"Terminate"},"tag":"Constant"},[]],[{"contents":{"tag":"Terminate"},"tag":"Constant"},[]]]],[{"contents":{"tag":"Split"},"tag":"Constant"},[[{"contents":{"tag":"Terminate"},"tag":"Constant"},[]],[{"contents":{"tag":"Terminate"},"tag":"Constant"},[]]]]]],"sizeExpanded":7},{"definition":[2,{"contents":{"tag":"Prepare"},"tag":"Constant"},{"contents":{"tag":"Terminate"},"tag":"Constant"}],"dependenciesDirect":[],"dependentsDirect":["PG10","PG30","PG36"],"depths":[0.75,0.5,0.75,0.5,0.375,0.6,0.42857142857142855,0.7142857142857143,0.7142857142857143,0.42857142857142855,0.5714285714285714,0.6666666666666666,0.6666666666666666,0.625,0.625,0.375,0.6666666666666666,0.5714285714285714,0.5714285714285714,0.7142857142857143,0.7142857142857143,0.7142857142857143,0.6,0.6,0.5,0.5,0.5,0.5714285714285714,0.5,0.625,0.375],"globalFreq":31,"impact":67,"occuranceInCorpus":["(Valid)MozartK280:2M01:08","(Valid)MozartK282:1M05:08","(Valid)MozartK283:2M01:04","(Valid)MozartK310:2M01:04","(Valid)MozartK545:2M01:08","(Valid)SchubertN16M05:08","(Valid)SchumannN04M01:04","(Valid)SchumannN06M02:07","(Valid)SchumannN11M03:04","(Valid)SchumannN12M02:09"],"patternID":"PG6","ruleTree":[{"contents":{"tag":"Prepare"},"tag":"Constant"},[[{"tag":"Hole"},[]],[{"contents":{"tag":"Terminate"},"tag":"Constant"},[]]]],"sizeExpanded":3},{"definition":[1,{"contents":[{"contents":{"tag":"Split"},"tag":"Constant"},["RG2",[]]],"tag":"With"},{"contents":{"tag":"Split"},"tag":"Constant"}],"dependenciesDirect":[],"dependentsDirect":[],"depths":[0,0,0,0,0,0],"globalFreq":6,"impact":0,"occuranceInCorpus":["(Valid)MozartK281:2M02:09","(Valid)MozartK310:2M01:04","(Valid)MozartK311:2M01:04"],"patternID":"PG60","ruleTree":[{"contents":{"tag":"Split"},"tag":"Constant"},[[{"contents":{"tag":"Split"},"tag":"Constant"},[[{"contents":{"tag":"Split"},"tag":"Constant"},[[{"tag":"Hole"},[]],[{"tag":"Hole"},[]]]],[{"tag":"Hole"},[]]]],[{"contents":{"tag":"Split"},"tag":"Constant"},[[{"tag":"Hole"},[]],[{"tag":"Hole"},[]]]]]],"sizeExpanded":9},{"definition":[1,{"contents":"PG7","tag":"Var"},{"contents":"PG5","tag":"Var"}],"dependenciesDirect":["PG5","PG7"],"dependentsDirect":[],"depths":[0.42857142857142855,0.5714285714285714,0.5714285714285714,0.4,0.4],"globalFreq":5,"impact":0,"occuranceInCorpus":["(Valid)MozartK282:1M05:08","(Valid)SchubertN10M07:15","(Valid)SchumannN07M01:04"],"patternID":"PG61","ruleTree":[{"contents":{"tag":"Split"},"tag":"Constant"},[[{"contents":{"tag":"Prepare"},"tag":"Constant"},[[{"contents":{"tag":"Terminate"},"tag":"Constant"},[]],[{"contents":{"tag":"Split"},"tag":"Constant"},[[{"contents":{"tag":"Terminate"},"tag":"Constant"},[]],[{"contents":{"tag":"Terminate"},"tag":"Constant"},[]]]]]],[{"contents":{"tag":"Terminate"},"tag":"Constant"},[]]]],"sizeExpanded":7},{"definition":[1,{"contents":"PG14","tag":"Var"},{"contents":"PG8","tag":"Var"}],"dependenciesDirect":["PG14","PG8"],"dependentsDirect":[],"depths":[0.5,0.5],"globalFreq":2,"impact":0,"occuranceInCorpus":["(Valid)MozartK309:2M01:04","(Valid)SchubertN20M06:19"],"patternID":"PG62","ruleTree":[{"contents":{"tag":"Split"},"tag":"Constant"},[[{"contents":{"tag":"Split"},"tag":"Constant"},[[{"contents":{"tag":"Terminate"},"tag":"Constant"},[]],[{"contents":{"tag":"Prepare"},"tag":"Constant"},[[{"contents":{"tag":"Terminate"},"tag":"Constant"},[]],[{"contents":{"tag":"Terminate"},"tag":"Constant"},[]]]]]],[{"contents":{"tag":"Prepare"},"tag":"Constant"},[[{"contents":{"tag":"Terminate"},"tag":"Constant"},[]],[{"contents":{"tag":"Terminate"},"tag":"Constant"},[]]]]]],"sizeExpanded":9},{"definition":[1,{"contents":"PG14","tag":"Var"},{"contents":"PG26","tag":"Var"}],"dependenciesDirect":["PG14","PG26"],"dependentsDirect":["PG74"],"depths":[0.42857142857142855,0.3333333333333333,0.42857142857142855,0.42857142857142855],"globalFreq":4,"impact":2,"occuranceInCorpus":["(Valid)SchubertN06M05:08","(Valid)SchubertN06M09:14"],"patternID":"PG63","ruleTree":[{"contents":{"tag":"Split"},"tag":"Constant"},[[{"contents":{"tag":"Prepare"},"tag":"Constant"},[[{"contents":{"tag":"Terminate"},"tag":"Constant"},[]],[{"contents":{"tag":"Respell"},"tag":"Constant"},[[{"contents":{"tag":"Split"},"tag":"Constant"},[[{"contents":{"tag":"Terminate"},"tag":"Constant"},[]],[{"contents":{"tag":"Terminate"},"tag":"Constant"},[]]]]]]]],[{"contents":{"tag":"Prepare"},"tag":"Constant"},[[{"contents":{"tag":"Terminate"},"tag":"Constant"},[]],[{"contents":{"tag":"Terminate"},"tag":"Constant"},[]]]]]],"sizeExpanded":10},{"definition":[1,{"contents":"PG12","tag":"Var"},{"contents":"PG31","tag":"Var"}],"dependenciesDirect":["PG12","PG31"],"dependentsDirect":[],"depths":[0.42857142857142855,0.42857142857142855,0.3333333333333333,0.3333333333333333],"globalFreq":4,"impact":0,"occuranceInCorpus":["(Valid)MozartK282:1M05:08","(Valid)MozartK310:2M01:04"],"patternID":"PG64","ruleTree":[{"contents":{"tag":"Prepare"},"tag":"Constant"},[[{"contents":{"tag":"Prepare"},"tag":"Constant"},[[{"contents":{"tag":"Terminate"},"tag":"Constant"},[]],[{"contents":{"tag":"Split"},"tag":"Constant"},[[{"contents":{"tag":"Terminate"},"tag":"Constant"},[]],[{"contents":{"tag":"Terminate"},"tag":"Constant"},[]]]]]],[{"contents":{"tag":"Split"},"tag":"Constant"},[[{"contents":{"tag":"Terminate"},"tag":"Constant"},[]],[{"contents":{"tag":"Prepare"},"tag":"Constant"},[[{"contents":{"tag":"Split"},"tag":"Constant"},[[{"contents":{"tag":"Terminate"},"tag":"Constant"},[]],[{"contents":{"tag":"Terminate"},"tag":"Constant"},[]]]],[{"contents":{"tag":"Terminate"},"tag":"Constant"},[]]]]]]]],"sizeExpanded":13},{"definition":[1,{"contents":{"contents":"Early","tag":"Shift"},"tag":"Constant"},{"contents":{"tag":"Respell"},"tag":"Constant"}],"dependenciesDirect":[],"dependentsDirect":[],"depths":[0.5,0.5,0.42857142857142855,0.42857142857142855],"globalFreq":4,"impact":0,"occuranceInCorpus":["(Valid)MozartK280:2M01:08","(Valid)SchubertN22M05:09"],"patternID":"PG65","ruleTree":[{"contents":{"contents":"Early","tag":"Shift"},"tag":"Constant"},[[{"contents":{"tag":"Respell"},"tag":"Constant"},[[{"tag":"Hole"},[]]]]]],"sizeExpanded":3},{"definition":[1,{"contents":{"tag":"Prepare"},"tag":"Constant"},{"contents":[{"contents":{"tag":"Prepare"},"tag":"Constant"},["RG1",[{"contents":{"tag":"Terminate"},"tag":"Constant"}]]],"tag":"With"}],"dependenciesDirect":[],"dependentsDirect":[],"depths":[0.625,0.625,0.42857142857142855,0.42857142857142855,0.375,0.375],"globalFreq":6,"impact":0,"occuranceInCorpus":["(Valid)MozartK280:2M01:08","(Valid)SchubertN09M09:14","(Valid)SchumannN12M02:09"],"patternID":"PG66","ruleTree":[{"contents":{"tag":"Prepare"},"tag":"Constant"},[[{"contents":{"tag":"Prepare"},"tag":"Constant"},[[{"contents":{"tag":"Terminate"},"tag":"Constant"},[]],[{"contents":{"tag":"Terminate"},"tag":"Constant"},[]]]],[{"tag":"Hole"},[]]]],"sizeExpanded":5},{"definition":[8,{"contents":[{"contents":{"tag":"Split"},"tag":"Constant"},["RG1",[{"contents":[{"contents":{"tag":"Split"},"tag":"Constant"},["RG2",[]]],"tag":"With"}]]],"tag":"With"},{"contents":"PG40","tag":"Var"}],"dependenciesDirect":["PG40"],"dependentsDirect":[],"depths":[0,0,0],"globalFreq":3,"impact":0,"occuranceInCorpus":["(Valid)MozartK282:1M05:08","(Valid)SchubertN08M11:20"],"patternID":"PG67","ruleTree":[{"contents":{"tag":"Split"},"tag":"Constant"},[[{"contents":{"tag":"Split"},"tag":"Constant"},[[{"contents":{"tag":"Split"},"tag":"Constant"},[[{"tag":"Hole"},[]],[{"tag":"Hole"},[]]]],[{"contents":{"tag":"Split"},"tag":"Constant"},[[{"tag":"Hole"},[]],[{"tag":"Hole"},[]]]]]],[{"contents":{"tag":"Split"},"tag":"Constant"},[[{"contents":{"tag":"Split"},"tag":"Constant"},[[{"tag":"Hole"},[]],[{"tag":"Hole"},[]]]],[{"contents":{"tag":"Split"},"tag":"Constant"},[[{"tag":"Hole"},[]],[{"contents":{"tag":"Prepare"},"tag":"Constant"},[[{"contents":{"tag":"Prepare"},"tag":"Constant"},[[{"contents":{"tag":"Terminate"},"tag":"Constant"},[]],[{"contents":{"tag":"Split"},"tag":"Constant"},[[{"contents":{"tag":"Terminate"},"tag":"Constant"},[]],[{"contents":{"tag":"Terminate"},"tag":"Constant"},[]]]]]],[{"contents":{"tag":"Split"},"tag":"Constant"},[[{"contents":{"tag":"Terminate"},"tag":"Constant"},[]],[{"contents":{"tag":"Terminate"},"tag":"Constant"},[]]]]]]]]]]]],"sizeExpanded":23},{"definition":[6,{"contents":"PG45","tag":"Var"},{"contents":[{"contents":{"tag":"Prepare"},"tag":"Constant"},["RG1",[{"contents":{"tag":"Terminate"},"tag":"Constant"}]]],"tag":"With"}],"dependenciesDirect":["PG45"],"dependentsDirect":[],"depths":[0,0,0,0],"globalFreq":4,"impact":0,"occuranceInCorpus":["(Valid)MozartK282:1M01:04","(Valid)SchubertN19M06:12"],"patternID":"PG68","ruleTree":[{"contents":{"tag":"Split"},"tag":"Constant"},[[{"contents":{"tag":"Split"},"tag":"Constant"},[[{"contents":{"tag":"Split"},"tag":"Constant"},[[{"tag":"Hole"},[]],[{"contents":{"tag":"Prepare"},"tag":"Constant"},[[{"contents":{"tag":"Terminate"},"tag":"Constant"},[]],[{"contents":{"tag":"Terminate"},"tag":"Constant"},[]]]]]],[{"contents":{"tag":"Split"},"tag":"Constant"},[[{"tag":"Hole"},[]],[{"tag":"Hole"},[]]]]]],[{"contents":{"tag":"Split"},"tag":"Constant"},[[{"contents":{"tag":"Split"},"tag":"Constant"},[[{"tag":"Hole"},[]],[{"tag":"Hole"},[]]]],[{"contents":{"tag":"Split"},"tag":"Constant"},[[{"contents":{"tag":"Prepare"},"tag":"Constant"},[[{"contents":{"tag":"Terminate"},"tag":"Constant"},[]],[{"contents":{"tag":"Terminate"},"tag":"Constant"},[]]]],[{"contents":{"tag":"Terminate"},"tag":"Constant"},[]]]]]]]],"sizeExpanded":19},{"definition":[5,{"contents":"PG51","tag":"Var"},{"contents":"PG25","tag":"Var"}],"dependenciesDirect":["PG25","PG51"],"dependentsDirect":[],"depths":[0,0.16666666666666666,0.16666666666666666],"globalFreq":3,"impact":0,"occuranceInCorpus":["(Valid)SchubertN09M05:08","(Valid)SchumannN03M10:15"],"patternID":"PG69","ruleTree":[{"contents":{"tag":"Split"},"tag":"Constant"},[[{"contents":{"tag":"Split"},"tag":"Constant"},[[{"tag":"Hole"},[]],[{"tag":"Hole"},[]]]],[{"contents":{"tag":"Split"},"tag":"Constant"},[[{"contents":{"tag":"Prepare"},"tag":"Constant"},[[{"tag":"Hole"},[]],[{"tag":"Hole"},[]]]],[{"contents":{"tag":"Prepare"},"tag":"Constant"},[[{"contents":{"tag":"Prepare"},"tag":"Constant"},[[{"contents":{"tag":"Terminate"},"tag":"Constant"},[]],[{"contents":{"tag":"Split"},"tag":"Constant"},[[{"contents":{"tag":"Terminate"},"tag":"Constant"},[]],[{"contents":{"tag":"Terminate"},"tag":"Constant"},[]],[{"contents":{"tag":"Terminate"},"tag":"Constant"},[]]]]]],[{"contents":{"tag":"Split"},"tag":"Constant"},[[{"contents":{"tag":"Terminate"},"tag":"Constant"},[]],[{"contents":{"tag":"Terminate"},"tag":"Constant"},[]]]]]]]]]],"sizeExpanded":18},{"definition":[2,{"contents":{"tag":"Split"},"tag":"Constant"},{"contents":{"tag":"Terminate"},"tag":"Constant"}],"dependenciesDirect":[],"dependentsDirect":["PG16","PG24","PG61","PG83","PG90"],"depths":[0.5714285714285714,0.42857142857142855,0.5714285714285714,0.5,0.3333333333333333,0.3333333333333333,0.7142857142857143,0.7142857142857143,0.2,0.2,0.5714285714285714,0.42857142857142855,0.5714285714285714,0.7142857142857143,0.5714285714285714,0.5714285714285714,0.6666666666666666,0.42857142857142855,0.42857142857142855,0.5,0.6666666666666666,0.42857142857142855,0.2857142857142857,0.2857142857142857,0.4,0.6666666666666666,0.5,0.5],"globalFreq":28,"impact":64,"occuranceInCorpus":["(Valid)MozartK282:1M01:04","(Valid)MozartK282:1M05:08","(Valid)MozartK545:2M01:08","(Valid)SchubertN05M09:12","(Valid)SchubertN08M11:20","(Valid)SchubertN09M09:14","(Valid)SchubertN10M07:15","(Valid)SchubertN14M05:08","(Valid)SchumannN03M10:15","(Valid)SchumannN06M02:07","(Valid)SchumannN07M01:04"],"patternID":"PG7","ruleTree":[{"contents":{"tag":"Split"},"tag":"Constant"},[[{"tag":"Hole"},[]],[{"contents":{"tag":"Terminate"},"tag":"Constant"},[]]]],"sizeExpanded":3},{"definition":[4,{"contents":"PG34","tag":"Var"},{"contents":{"tag":"Terminate"},"tag":"Constant"}],"dependenciesDirect":["PG34"],"dependentsDirect":["PG76"],"depths":[0,0],"globalFreq":2,"impact":4,"occuranceInCorpus":["(Valid)SchubertN02M06:09","(Valid)SchubertN15M06:09"],"patternID":"PG70","ruleTree":[{"contents":{"tag":"Split"},"tag":"Constant"},[[{"contents":{"tag":"Split"},"tag":"Constant"},[[{"contents":{"tag":"Split"},"tag":"Constant"},[[{"tag":"Hole"},[]],[{"tag":"Hole"},[]]]],[{"contents":{"tag":"Split"},"tag":"Constant"},[[{"tag":"Hole"},[]],[{"contents":{"tag":"Terminate"},"tag":"Constant"},[]]]]]],[{"contents":{"tag":"Split"},"tag":"Constant"},[[{"contents":{"tag":"Split"},"tag":"Constant"},[[{"tag":"Hole"},[]],[{"tag":"Hole"},[]]]],[{"contents":{"tag":"Split"},"tag":"Constant"},[[{"tag":"Hole"},[]],[{"contents":{"tag":"Split"},"tag":"Constant"},[[{"contents":{"tag":"Terminate"},"tag":"Constant"},[]],[{"contents":{"tag":"Terminate"},"tag":"Constant"},[]]]]]]]]]],"sizeExpanded":17},{"definition":[3,{"contents":[{"contents":{"tag":"Prepare"},"tag":"Constant"},["RG1",[{"contents":{"tag":"Split"},"tag":"Constant"}]]],"tag":"With"},{"contents":{"tag":"Terminate"},"tag":"Constant"}],"dependenciesDirect":[],"dependentsDirect":[],"depths":[0.5,0.42857142857142855],"globalFreq":2,"impact":0,"occuranceInCorpus":["(Valid)MozartK310:2M01:04","(Valid)MozartK545:2M01:08"],"patternID":"PG71","ruleTree":[{"contents":{"tag":"Prepare"},"tag":"Constant"},[[{"contents":{"tag":"Split"},"tag":"Constant"},[[{"tag":"Hole"},[]],[{"tag":"Hole"},[]]]],[{"contents":{"tag":"Split"},"tag":"Constant"},[[{"contents":{"tag":"Terminate"},"tag":"Constant"},[]],[{"tag":"Hole"},[]]]]]],"sizeExpanded":7},{"definition":[3,{"contents":[{"contents":{"tag":"Split"},"tag":"Constant"},["RG1",[{"contents":[{"contents":{"tag":"Split"},"tag":"Constant"},["RG2",[]]],"tag":"With"}]]],"tag":"With"},{"contents":"PG8","tag":"Var"}],"dependenciesDirect":["PG8"],"dependentsDirect":["PG75"],"depths":[0,0],"globalFreq":2,"impact":4,"occuranceInCorpus":["(Valid)MozartK332:2M01:04","(Valid)SchumannN10M08:15"],"patternID":"PG72","ruleTree":[{"contents":{"tag":"Split"},"tag":"Constant"},[[{"contents":{"tag":"Split"},"tag":"Constant"},[[{"contents":{"tag":"Split"},"tag":"Constant"},[[{"tag":"Hole"},[]],[{"tag":"Hole"},[]]]],[{"contents":{"tag":"Split"},"tag":"Constant"},[[{"contents":{"tag":"Split"},"tag":"Constant"},[[{"contents":{"tag":"Terminate"},"tag":"Constant"},[]],[{"contents":{"tag":"Prepare"},"tag":"Constant"},[[{"contents":{"tag":"Terminate"},"tag":"Constant"},[]],[{"contents":{"tag":"Terminate"},"tag":"Constant"},[]]]]]],[{"tag":"Hole"},[]]]]]],[{"contents":{"tag":"Split"},"tag":"Constant"},[[{"contents":{"tag":"Split"},"tag":"Constant"},[[{"tag":"Hole"},[]],[{"tag":"Hole"},[]]]],[{"contents":{"tag":"Split"},"tag":"Constant"},[[{"tag":"Hole"},[]],[{"tag":"Hole"},[]]]]]]]],"sizeExpanded":19},{"definition":[3,{"contents":"PG21","tag":"Var"},{"contents":[{"contents":{"tag":"Split"},"tag":"Constant"},["RG1",[{"contents":{"tag":"Terminate"},"tag":"Constant"}]]],"tag":"With"}],"dependenciesDirect":["PG21"],"dependentsDirect":["PG74"],"depths":[0,0],"globalFreq":2,"impact":2,"occuranceInCorpus":["(Valid)SchubertN06M05:08","(Valid)SchubertN06M09:14"],"patternID":"PG73","ruleTree":[{"contents":{"tag":"Split"},"tag":"Constant"},[[{"contents":{"tag":"Split"},"tag":"Constant"},[[{"contents":{"tag":"Split"},"tag":"Constant"},[[{"tag":"Hole"},[]],[{"contents":{"tag":"Prepare"},"tag":"Constant"},[[{"contents":{"tag":"Terminate"},"tag":"Constant"},[]],[{"contents":{"tag":"Terminate"},"tag":"Constant"},[]]]]]],[{"contents":{"tag":"Split"},"tag":"Constant"},[[{"tag":"Hole"},[]],[{"contents":{"tag":"Split"},"tag":"Constant"},[[{"contents":{"tag":"Terminate"},"tag":"Constant"},[]],[{"contents":{"tag":"Terminate"},"tag":"Constant"},[]]]]]]]],[{"tag":"Hole"},[]]]],"sizeExpanded":13},{"definition":[2,{"contents":"PG73","tag":"Var"},{"contents":"PG63","tag":"Var"}],"dependenciesDirect":["PG63","PG73"],"dependentsDirect":["PG82"],"depths":[0,0],"globalFreq":2,"impact":4,"occuranceInCorpus":["(Valid)SchubertN06M05:08","(Valid)SchubertN06M09:14"],"patternID":"PG74","ruleTree":[{"contents":{"tag":"Split"},"tag":"Constant"},[[{"contents":{"tag":"Split"},"tag":"Constant"},[[{"contents":{"tag":"Split"},"tag":"Constant"},[[{"tag":"Hole"},[]],[{"contents":{"tag":"Prepare"},"tag":"Constant"},[[{"contents":{"tag":"Terminate"},"tag":"Constant"},[]],[{"contents":{"tag":"Terminate"},"tag":"Constant"},[]]]]]],[{"contents":{"tag":"Split"},"tag":"Constant"},[[{"contents":{"tag":"Split"},"tag":"Constant"},[[{"contents":{"tag":"Prepare"},"tag":"Constant"},[[{"contents":{"tag":"Terminate"},"tag":"Constant"},[]],[{"contents":{"tag":"Respell"},"tag":"Constant"},[[{"contents":{"tag":"Split"},"tag":"Constant"},[[{"contents":{"tag":"Terminate"},"tag":"Constant"},[]],[{"contents":{"tag":"Terminate"},"tag":"Constant"},[]]]]]]]],[{"contents":{"tag":"Prepare"},"tag":"Constant"},[[{"contents":{"tag":"Terminate"},"tag":"Constant"},[]],[{"contents":{"tag":"Terminate"},"tag":"Constant"},[]]]]]],[{"contents":{"tag":"Split"},"tag":"Constant"},[[{"contents":{"tag":"Terminate"},"tag":"Constant"},[]],[{"contents":{"tag":"Terminate"},"tag":"Constant"},[]]]]]]]],[{"tag":"Hole"},[]]]],"sizeExpanded":22},{"definition":[2,{"contents":"PG72","tag":"Var"},{"contents":"PG39","tag":"Var"}],"dependenciesDirect":["PG39","PG72"],"dependentsDirect":[],"depths":[0,0,0,0],"globalFreq":4,"impact":0,"occuranceInCorpus":["(Valid)MozartK332:2M01:04","(Valid)SchumannN10M08:15"],"patternID":"PG75","ruleTree":[{"contents":{"tag":"Split"},"tag":"Constant"},[[{"contents":{"tag":"Split"},"tag":"Constant"},[[{"contents":{"tag":"Split"},"tag":"Constant"},[[{"tag":"Hole"},[]],[{"contents":{"tag":"Split"},"tag":"Constant"},[[{"contents":{"tag":"Prepare"},"tag":"Constant"},[[{"contents":{"tag":"Terminate"},"tag":"Constant"},[]],[{"contents":{"tag":"Terminate"},"tag":"Constant"},[]]]],[{"contents":{"tag":"Prepare"},"tag":"Constant"},[[{"contents":{"tag":"Terminate"},"tag":"Constant"},[]],[{"contents":{"tag":"Terminate"},"tag":"Constant"},[]]]]]]]],[{"contents":{"tag":"Split"},"tag":"Constant"},[[{"contents":{"tag":"Split"},"tag":"Constant"},[[{"contents":{"tag":"Terminate"},"tag":"Constant"},[]],[{"contents":{"tag":"Prepare"},"tag":"Constant"},[[{"contents":{"tag":"Terminate"},"tag":"Constant"},[]],[{"contents":{"tag":"Terminate"},"tag":"Constant"},[]]]]]],[{"tag":"Hole"},[]]]]]],[{"contents":{"tag":"Split"},"tag":"Constant"},[[{"contents":{"tag":"Split"},"tag":"Constant"},[[{"tag":"Hole"},[]],[{"tag":"Hole"},[]]]],[{"contents":{"tag":"Split"},"tag":"Constant"},[[{"tag":"Hole"},[]]]]]]]],"sizeExpanded":24},{"definition":[2,{"contents":"PG70","tag":"Var"},{"contents":{"tag":"Terminate"},"tag":"Constant"}],"dependenciesDirect":["PG70"],"dependentsDirect":[],"depths":[0,0,0,0],"globalFreq":4,"impact":0,"occuranceInCorpus":["(Valid)SchubertN02M06:09","(Valid)SchubertN15M06:09"],"patternID":"PG76","ruleTree":[{"contents":{"tag":"Split"},"tag":"Constant"},[[{"contents":{"tag":"Split"},"tag":"Constant"},[[{"contents":{"tag":"Split"},"tag":"Constant"},[[{"tag":"Hole"},[]],[{"contents":{"tag":"Terminate"},"tag":"Constant"},[]]]],[{"contents":{"tag":"Split"},"tag":"Constant"},[[{"tag":"Hole"},[]],[{"contents":{"tag":"Terminate"},"tag":"Constant"},[]]]]]],[{"contents":{"tag":"Split"},"tag":"Constant"},[[{"contents":{"tag":"Split"},"tag":"Constant"},[[{"tag":"Hole"},[]],[{"tag":"Hole"},[]]]],[{"contents":{"tag":"Split"},"tag":"Constant"},[[{"tag":"Hole"},[]],[{"contents":{"tag":"Split"},"tag":"Constant"},[[{"contents":{"tag":"Terminate"},"tag":"Constant"},[]],[{"contents":{"tag":"Terminate"},"tag":"Constant"},[]]]]]]]]]],"sizeExpanded":17},{"definition":[2,{"contents":"PG57","tag":"Var"},{"contents":[{"contents":{"tag":"Split"},"tag":"Constant"},["RG1",[{"contents":{"tag":"Terminate"},"tag":"Constant"}]]],"tag":"With"}],"dependenciesDirect":["PG57"],"dependentsDirect":[],"depths":[0.3333333333333333,0.3333333333333333,0.5,0.5],"globalFreq":4,"impact":0,"occuranceInCorpus":["(Valid)MozartK310:2M01:04","(Valid)SchubertN03M08:15"],"patternID":"PG77","ruleTree":[{"contents":{"tag":"Split"},"tag":"Constant"},[[{"contents":{"tag":"Prepare"},"tag":"Constant"},[[{"tag":"Hole"},[]],[{"contents":{"tag":"Terminate"},"tag":"Constant"},[]]]],[{"contents":{"tag":"Prepare"},"tag":"Constant"},[[{"contents":{"tag":"Split"},"tag":"Constant"},[[{"contents":{"tag":"Terminate"},"tag":"Constant"},[]],[{"contents":{"tag":"Terminate"},"tag":"Constant"},[]]]],[{"contents":{"tag":"Split"},"tag":"Constant"},[[{"contents":{"tag":"Terminate"},"tag":"Constant"},[]],[{"contents":{"tag":"Terminate"},"tag":"Constant"},[]]]]]]]],"sizeExpanded":11},{"definition":[2,{"contents":"PG55","tag":"Var"},{"contents":[{"contents":{"tag":"Prepare"},"tag":"Constant"},["RG1",[{"contents":{"tag":"Terminate"},"tag":"Constant"}]]],"tag":"With"}],"dependenciesDirect":["PG55"],"dependentsDirect":["PG81"],"depths":[0,0],"globalFreq":2,"impact":4,"occuranceInCorpus":["(Valid)SchubertN16M05:08","(Valid)SchumannN07M01:04"],"patternID":"PG78","ruleTree":[{"contents":{"tag":"Split"},"tag":"Constant"},[[{"contents":{"tag":"Split"},"tag":"Constant"},[[{"contents":{"tag":"Split"},"tag":"Constant"},[[{"tag":"Hole"},[]],[{"contents":{"tag":"Prepare"},"tag":"Constant"},[[{"contents":{"tag":"Terminate"},"tag":"Constant"},[]],[{"contents":{"tag":"Terminate"},"tag":"Constant"},[]]]]]],[{"contents":{"tag":"Split"},"tag":"Constant"},[[{"contents":{"tag":"Prepare"},"tag":"Constant"},[[{"contents":{"tag":"Terminate"},"tag":"Constant"},[]],[{"contents":{"tag":"Terminate"},"tag":"Constant"},[]]]],[{"contents":{"tag":"Prepare"},"tag":"Constant"},[[{"contents":{"tag":"Terminate"},"tag":"Constant"},[]],[{"contents":{"tag":"Terminate"},"tag":"Constant"},[]]]]]]]],[{"tag":"Hole"},[]]]],"sizeExpanded":15},{"definition":[2,{"contents":{"tag":"Prepare"},"tag":"Constant"},{"contents":"PG9","tag":"Var"}],"dependenciesDirect":["PG9"],"dependentsDirect":[],"depths":[0.5714285714285714,0.5714285714285714,0.5,0.5],"globalFreq":4,"impact":0,"occuranceInCorpus":["(Valid)MozartK282:1M01:04","(Valid)MozartK457:2M01:03"],"patternID":"PG79","ruleTree":[{"contents":{"tag":"Prepare"},"tag":"Constant"},[[{"tag":"Hole"},[]],[{"contents":{"tag":"Respell"},"tag":"Constant"},[[{"contents":{"tag":"Split"},"tag":"Constant"},[[{"contents":{"tag":"Terminate"},"tag":"Constant"},[]],[{"contents":{"tag":"Terminate"},"tag":"Constant"},[]]]]]]]],"sizeExpanded":6},{"definition":[1,{"contents":"PG4","tag":"Var"},{"contents":[{"contents":{"tag":"Prepare"},"tag":"Constant"},["RG1",[{"contents":{"tag":"Terminate"},"tag":"Constant"}]]],"tag":"With"}],"dependenciesDirect":["PG4"],"dependentsDirect":["PG62","PG72","PG88"],"depths":[0.7142857142857143,0.5714285714285714,0.5714285714285714,0.5,0.6666666666666666,0.6666666666666666,0.5,0.5,0.4,0.4,0.3333333333333333,0.42857142857142855,0.42857142857142855,0.5,0.4,0.4,0.42857142857142855,0.42857142857142855,0.6,0.6,0.4,0.42857142857142855,0.42857142857142855,0.6666666666666666,0.6666666666666666,0.375,0.375,0.375,0.375,0.375,0.375,0.375],"globalFreq":32,"impact":13,"occuranceInCorpus":["(Valid)MozartK282:1M05:08","(Valid)MozartK309:2M01:04","(Valid)MozartK332:2M01:04","(Valid)SchubertN09M05:08","(Valid)SchubertN20M06:19","(Valid)SchumannN10M08:15"],"patternID":"PG8","ruleTree":[{"contents":{"tag":"Split"},"tag":"Constant"},[[{"contents":{"tag":"Terminate"},"tag":"Constant"},[]],[{"contents":{"tag":"Prepare"},"tag":"Constant"},[[{"contents":{"tag":"Terminate"},"tag":"Constant"},[]],[{"contents":{"tag":"Terminate"},"tag":"Constant"},[]]]]]],"sizeExpanded":5},{"definition":[2,{"contents":{"tag":"Split"},"tag":"Constant"},{"contents":"PG14","tag":"Var"}],"dependenciesDirect":["PG14"],"dependentsDirect":[],"depths":[0.3333333333333333,0.3333333333333333,0,0],"globalFreq":4,"impact":0,"occuranceInCorpus":["(Valid)SchubertN18M04:08","(Valid)SchumannN11M03:04"],"patternID":"PG80","ruleTree":[{"contents":{"tag":"Split"},"tag":"Constant"},[[{"tag":"Hole"},[]],[{"contents":{"tag":"Split"},"tag":"Constant"},[[{"tag":"Hole"},[]],[{"contents":{"tag":"Prepare"},"tag":"Constant"},[[{"contents":{"tag":"Terminate"},"tag":"Constant"},[]],[{"contents":{"tag":"Terminate"},"tag":"Constant"},[]]]]]]]],"sizeExpanded":7},{"definition":[1,{"contents":"PG78","tag":"Var"},{"contents":{"tag":"Terminate"},"tag":"Constant"}],"dependenciesDirect":["PG78"],"dependentsDirect":[],"depths":[0,0,0,0],"globalFreq":4,"impact":0,"occuranceInCorpus":["(Valid)SchubertN16M05:08","(Valid)SchumannN07M01:04"],"patternID":"PG81","ruleTree":[{"contents":{"tag":"Split"},"tag":"Constant"},[[{"contents":{"tag":"Split"},"tag":"Constant"},[[{"contents":{"tag":"Split"},"tag":"Constant"},[[{"contents":{"tag":"Terminate"},"tag":"Constant"},[]],[{"contents":{"tag":"Prepare"},"tag":"Constant"},[[{"contents":{"tag":"Terminate"},"tag":"Constant"},[]],[{"contents":{"tag":"Terminate"},"tag":"Constant"},[]]]]]],[{"contents":{"tag":"Split"},"tag":"Constant"},[[{"contents":{"tag":"Prepare"},"tag":"Constant"},[[{"contents":{"tag":"Terminate"},"tag":"Constant"},[]],[{"contents":{"tag":"Terminate"},"tag":"Constant"},[]]]],[{"contents":{"tag":"Prepare"},"tag":"Constant"},[[{"contents":{"tag":"Terminate"},"tag":"Constant"},[]],[{"contents":{"tag":"Terminate"},"tag":"Constant"},[]]]]]]]],[{"tag":"Hole"},[]]]],"sizeExpanded":15},{"definition":[1,{"contents":"PG74","tag":"Var"},{"contents":"PG9","tag":"Var"}],"dependenciesDirect":["PG74","PG9"],"dependentsDirect":[],"depths":[0,0,0,0],"globalFreq":4,"impact":0,"occuranceInCorpus":["(Valid)SchubertN06M05:08","(Valid)SchubertN06M09:14"],"patternID":"PG82","ruleTree":[{"contents":{"tag":"Split"},"tag":"Constant"},[[{"contents":{"tag":"Split"},"tag":"Constant"},[[{"contents":{"tag":"Split"},"tag":"Constant"},[[{"contents":{"tag":"Respell"},"tag":"Constant"},[[{"contents":{"tag":"Split"},"tag":"Constant"},[[{"contents":{"tag":"Terminate"},"tag":"Constant"},[]],[{"contents":{"tag":"Terminate"},"tag":"Constant"},[]]]]]],[{"contents":{"tag":"Prepare"},"tag":"Constant"},[[{"contents":{"tag":"Terminate"},"tag":"Constant"},[]],[{"contents":{"tag":"Terminate"},"tag":"Constant"},[]]]]]],[{"contents":{"tag":"Split"},"tag":"Constant"},[[{"contents":{"tag":"Split"},"tag":"Constant"},[[{"contents":{"tag":"Prepare"},"tag":"Constant"},[[{"contents":{"tag":"Terminate"},"tag":"Constant"},[]],[{"contents":{"tag":"Respell"},"tag":"Constant"},[[{"contents":{"tag":"Split"},"tag":"Constant"},[[{"contents":{"tag":"Terminate"},"tag":"Constant"},[]],[{"contents":{"tag":"Terminate"},"tag":"Constant"},[]]]]]]]],[{"contents":{"tag":"Prepare"},"tag":"Constant"},[[{"contents":{"tag":"Terminate"},"tag":"Constant"},[]],[{"contents":{"tag":"Terminate"},"tag":"Constant"},[]]]]]],[{"contents":{"tag":"Split"},"tag":"Constant"},[[{"contents":{"tag":"Terminate"},"tag":"Constant"},[]],[{"contents":{"tag":"Terminate"},"tag":"Constant"},[]]]]]]]],[{"tag":"Hole"},[]]]],"sizeExpanded":25},{"definition":[1,{"contents":"PG7","tag":"Var"},{"contents":"PG10","tag":"Var"}],"dependenciesDirect":["PG10","PG7"],"dependentsDirect":[],"depths":[0.42857142857142855,0.42857142857142855],"globalFreq":2,"impact":0,"occuranceInCorpus":["(Valid)MozartK545:2M01:08","(Valid)SchumannN06M02:07"],"patternID":"PG83","ruleTree":[{"contents":{"tag":"Split"},"tag":"Constant"},[[{"contents":{"tag":"Prepare"},"tag":"Constant"},[[{"contents":{"tag":"Split"},"tag":"Constant"},[[{"contents":{"tag":"Terminate"},"tag":"Constant"},[]],[{"contents":{"tag":"Terminate"},"tag":"Constant"},[]]]],[{"contents":{"tag":"Terminate"},"tag":"Constant"},[]]]],[{"contents":{"tag":"Terminate"},"tag":"Constant"},[]]]],"sizeExpanded":7},{"definition":[1,{"contents":"PG58","tag":"Var"},{"contents":{"tag":"Terminate"},"tag":"Constant"}],"dependenciesDirect":["PG58"],"dependentsDirect":[],"depths":[0,0,0,0],"globalFreq":4,"impact":0,"occuranceInCorpus":["(Valid)MozartK331:1M01:04","(Valid)MozartK545:2M01:08"],"patternID":"PG84","ruleTree":[{"contents":{"tag":"Split"},"tag":"Constant"},[[{"contents":{"tag":"Split"},"tag":"Constant"},[[{"contents":{"tag":"Split"},"tag":"Constant"},[[{"contents":{"tag":"Terminate"},"tag":"Constant"},[]],[{"tag":"Hole"},[]]]],[{"contents":{"tag":"Split"},"tag":"Constant"},[[{"contents":{"tag":"Terminate"},"tag":"Constant"},[]],[{"tag":"Hole"},[]]]]]],[{"tag":"Hole"},[]]]],"sizeExpanded":9},{"definition":[1,{"contents":"PG41","tag":"Var"},{"contents":{"tag":"Split"},"tag":"Constant"}],"dependenciesDirect":["PG41"],"dependentsDirect":[],"depths":[0.3333333333333333,0.3333333333333333,0.3333333333333333,0.3333333333333333],"globalFreq":4,"impact":0,"occuranceInCorpus":["(Valid)MozartK310:2M01:04","(Valid)MozartK332:2M01:04"],"patternID":"PG85","ruleTree":[{"contents":{"tag":"Prepare"},"tag":"Constant"},[[{"contents":{"tag":"Prepare"},"tag":"Constant"},[[{"contents":{"tag":"Split"},"tag":"Constant"},[[{"contents":{"tag":"Terminate"},"tag":"Constant"},[]],[{"contents":{"tag":"Terminate"},"tag":"Constant"},[]]]],[{"contents":{"tag":"Split"},"tag":"Constant"},[[{"contents":{"tag":"Terminate"},"tag":"Constant"},[]],[{"contents":{"tag":"Terminate"},"tag":"Constant"},[]]]]]],[{"contents":{"tag":"Split"},"tag":"Constant"},[[{"tag":"Hole"},[]],[{"tag":"Hole"},[]]]]]],"sizeExpanded":11},{"definition":[1,{"contents":"PG4","tag":"Var"},{"contents":"PG3","tag":"Var"}],"dependenciesDirect":["PG3","PG4"],"dependentsDirect":[],"depths":[0.2857142857142857,0.2857142857142857,0.42857142857142855,0.42857142857142855],"globalFreq":4,"impact":0,"occuranceInCorpus":["(Valid)MozartK283:2M01:04","(Valid)SchumannN06M02:07"],"patternID":"PG86","ruleTree":[{"contents":{"tag":"Split"},"tag":"Constant"},[[{"contents":{"tag":"Terminate"},"tag":"Constant"},[]],[{"contents":{"tag":"Prepare"},"tag":"Constant"},[[{"contents":{"tag":"Terminate"},"tag":"Constant"},[]],[{"tag":"Hole"},[]]]]]],"sizeExpanded":5},{"definition":[1,{"contents":"PG4","tag":"Var"},{"contents":"PG24","tag":"Var"}],"dependenciesDirect":["PG24","PG4"],"dependentsDirect":[],"depths":[0.5714285714285714,0.5714285714285714],"globalFreq":2,"impact":0,"occuranceInCorpus":["(Valid)MozartK545:2M01:08","(Valid)SchubertN14M05:08"],"patternID":"PG87","ruleTree":[{"contents":{"tag":"Split"},"tag":"Constant"},[[{"contents":{"tag":"Terminate"},"tag":"Constant"},[]],[{"contents":{"tag":"Split"},"tag":"Constant"},[[{"contents":{"tag":"Prepare"},"tag":"Constant"},[[{"contents":{"tag":"Terminate"},"tag":"Constant"},[]],[{"contents":{"tag":"Terminate"},"tag":"Constant"},[]]]],[{"contents":{"tag":"Terminate"},"tag":"Constant"},[]]]]]],"sizeExpanded":7},{"definition":[1,{"contents":"PG3","tag":"Var"},{"contents":"PG8","tag":"Var"}],"dependenciesDirect":["PG3","PG8"],"dependentsDirect":[],"depths":[0.5714285714285714,0.5714285714285714,0.4],"globalFreq":3,"impact":0,"occuranceInCorpus":["(Valid)MozartK282:1M05:08","(Valid)SchubertN09M05:08"],"patternID":"PG88","ruleTree":[{"contents":{"tag":"Prepare"},"tag":"Constant"},[[{"contents":{"tag":"Terminate"},"tag":"Constant"},[]],[{"contents":{"tag":"Split"},"tag":"Constant"},[[{"contents":{"tag":"Terminate"},"tag":"Constant"},[]],[{"contents":{"tag":"Prepare"},"tag":"Constant"},[[{"contents":{"tag":"Terminate"},"tag":"Constant"},[]],[{"contents":{"tag":"Terminate"},"tag":"Constant"},[]]]]]]]],"sizeExpanded":7},{"definition":[1,{"contents":"PG3","tag":"Var"},{"contents":"PG16","tag":"Var"}],"dependenciesDirect":["PG16","PG3"],"dependentsDirect":[],"depths":[0.5,0.5],"globalFreq":2,"impact":0,"occuranceInCorpus":["(Valid)SchubertN05M09:12","(Valid)SchumannN03M10:15"],"patternID":"PG89","ruleTree":[{"contents":{"tag":"Prepare"},"tag":"Constant"},[[{"contents":{"tag":"Terminate"},"tag":"Constant"},[]],[{"contents":{"tag":"Split"},"tag":"Constant"},[[{"contents":{"tag":"Split"},"tag":"Constant"},[[{"contents":{"tag":"Terminate"},"tag":"Constant"},[]],[{"contents":{"tag":"Terminate"},"tag":"Constant"},[]]]],[{"contents":{"tag":"Terminate"},"tag":"Constant"},[]]]]]],"sizeExpanded":7},{"definition":[1,{"contents":{"tag":"Respell"},"tag":"Constant"},{"contents":[{"contents":{"tag":"Split"},"tag":"Constant"},["RG1",[{"contents":{"tag":"Terminate"},"tag":"Constant"}]]],"tag":"With"}],"dependenciesDirect":[],"dependentsDirect":["PG26","PG79","PG82"],"depths":[0.7142857142857143,0.6666666666666666,0.6666666666666666,0.3333333333333333,0.3333333333333333,0.625,0.6,0.6,0.5714285714285714,0.7142857142857143,0.42857142857142855,0.6666666666666666,0.6666666666666666,0.7777777777777778,0.6666666666666666,0.6666666666666666,0.5555555555555556,0.5555555555555556,0.5555555555555556,0.5555555555555556,0.3333333333333333,0.5714285714285714,0.42857142857142855,0.7142857142857143,0.75,0.6666666666666666],"globalFreq":26,"impact":31,"occuranceInCorpus":["(Valid)MozartK282:1M01:04","(Valid)MozartK457:2M01:03","(Valid)SchubertN06M05:08","(Valid)SchubertN06M09:14"],"patternID":"PG9","ruleTree":[{"contents":{"tag":"Respell"},"tag":"Constant"},[[{"contents":{"tag":"Split"},"tag":"Constant"},[[{"contents":{"tag":"Terminate"},"tag":"Constant"},[]],[{"contents":{"tag":"Terminate"},"tag":"Constant"},[]]]]]],"sizeExpanded":4},{"definition":[1,{"contents":"PG12","tag":"Var"},{"contents":"PG7","tag":"Var"}],"dependenciesDirect":["PG12","PG7"],"dependentsDirect":[],"depths":[0.42857142857142855,0.42857142857142855,0.42857142857142855,0.42857142857142855],"globalFreq":4,"impact":0,"occuranceInCorpus":["(Valid)MozartK282:1M01:04","(Valid)SchubertN09M09:14"],"patternID":"PG90","ruleTree":[{"contents":{"tag":"Prepare"},"tag":"Constant"},[[{"contents":{"tag":"Prepare"},"tag":"Constant"},[[{"contents":{"tag":"Terminate"},"tag":"Constant"},[]],[{"contents":{"tag":"Split"},"tag":"Constant"},[[{"contents":{"tag":"Terminate"},"tag":"Constant"},[]],[{"contents":{"tag":"Terminate"},"tag":"Constant"},[]]]]]],[{"contents":{"tag":"Split"},"tag":"Constant"},[[{"tag":"Hole"},[]],[{"contents":{"tag":"Terminate"},"tag":"Constant"},[]]]]]],"sizeExpanded":9},{"definition":[1,{"contents":"PG12","tag":"Var"},{"contents":"PG4","tag":"Var"}],"dependenciesDirect":["PG12","PG4"],"dependentsDirect":[],"depths":[0.42857142857142855,0.42857142857142855,0.375,0.375],"globalFreq":4,"impact":0,"occuranceInCorpus":["(Valid)MozartK545:2M01:08","(Valid)MozartK570:2M01:04"],"patternID":"PG91","ruleTree":[{"contents":{"tag":"Prepare"},"tag":"Constant"},[[{"contents":{"tag":"Prepare"},"tag":"Constant"},[[{"contents":{"tag":"Terminate"},"tag":"Constant"},[]],[{"contents":{"tag":"Split"},"tag":"Constant"},[[{"contents":{"tag":"Terminate"},"tag":"Constant"},[]],[{"contents":{"tag":"Terminate"},"tag":"Constant"},[]]]]]],[{"contents":{"tag":"Split"},"tag":"Constant"},[[{"contents":{"tag":"Terminate"},"tag":"Constant"},[]],[{"tag":"Hole"},[]]]]]],"sizeExpanded":9},{"definition":[1,{"contents":"PG12","tag":"Var"},{"contents":"PG16","tag":"Var"}],"dependenciesDirect":["PG12","PG16"],"dependentsDirect":[],"depths":[0.42857142857142855,0.42857142857142855,0.42857142857142855],"globalFreq":3,"impact":0,"occuranceInCorpus":["(Valid)MozartK282:1M05:08","(Valid)SchubertN08M11:20"],"patternID":"PG92","ruleTree":[{"contents":{"tag":"Prepare"},"tag":"Constant"},[[{"contents":{"tag":"Prepare"},"tag":"Constant"},[[{"contents":{"tag":"Terminate"},"tag":"Constant"},[]],[{"contents":{"tag":"Split"},"tag":"Constant"},[[{"contents":{"tag":"Terminate"},"tag":"Constant"},[]],[{"contents":{"tag":"Terminate"},"tag":"Constant"},[]]]]]],[{"contents":{"tag":"Split"},"tag":"Constant"},[[{"contents":{"tag":"Split"},"tag":"Constant"},[[{"contents":{"tag":"Terminate"},"tag":"Constant"},[]],[{"contents":{"tag":"Terminate"},"tag":"Constant"},[]]]],[{"contents":{"tag":"Terminate"},"tag":"Constant"},[]]]]]],"sizeExpanded":11}];
+                const hierarchicalData = hierarchy(data);
+                const chart = createChart(hierarchicalData);
+                
+                // Replace loading message with chart
+                const container = document.getElementById('chart-container');
+                container.innerHTML = '';
+                container.appendChild(chart);
+                
+            } catch (error) {
+                console.error('Error initializing chart:', error);
+                document.getElementById('chart-container').innerHTML = 
+                    `<div class="error">Error loading visualization: ${error.message}</div>`;
+            }
+        }
+
+        // Initialize when DOM is ready
+        document.addEventListener('DOMContentLoaded', init);
+    </script>
+</body>
+</html>

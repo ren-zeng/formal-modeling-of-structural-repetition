@@ -1,0 +1,766 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{title}}</title>
+    <script src="https://d3js.org/d3.v7.min.js"></script>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background-color: white;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            padding: 20px;
+        }
+        
+        .header {
+            color: grey;
+            font: 13px/25.5px var(--sans-serif);
+            text-transform: uppercase;
+            margin-bottom: 20px;
+        }
+        
+        h1 {
+            font-size: 2em;
+            margin-bottom: 10px;
+            color: #333;
+        }
+        
+        .description {
+            margin-bottom: 30px;
+            color: #666;
+            line-height: 1.6;
+        }
+        
+        #chart-container {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 600px;
+        }
+        
+        .tree-tooltip {
+            box-shadow: 0 4px 20px rgba(0,0,0,0.3);
+            border: 1px solid #333;
+        }
+        
+        .loading {
+            text-align: center;
+            padding: 50px;
+            color: #999;
+        }
+        
+        .error {
+            color: #d32f2f;
+            background-color: #ffebee;
+            padding: 15px;
+            border-radius: 4px;
+            margin: 20px 0;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>{{title}}</h1>
+        </div>
+        
+        <div class="description">
+            {{description}}
+        </div>
+        
+        <div id="chart-container">
+            <div class="loading">Loading visualization...</div>
+        </div>
+    </div>
+
+    <script>
+        // Configuration constants
+        const CONFIG = {
+            EDGE_WIDTH: 2,
+            EDGE_WIDTH_HOVER: 3,
+            EDGE_OPACITY: 0.3,
+            EDGE_OPACITY_HOVER: 1,
+            
+            // Gradient colors
+            GRADIENT_SOURCE_COLOR: "#ff0000",
+            GRADIENT_MIDDLE_COLOR: "#f5f5f5",
+            GRADIENT_TARGET_COLOR: "#0000ff",
+            GRADIENT_MIDDLE_START: "50%",
+            GRADIENT_MIDDLE_END: "50%",
+            
+            // Level colors
+            LEVEL_COLORS: [
+                "#e41a1c", "#377eb8", "#4daf4a", "#984ea3", "#ff7f00", "#999999",
+                "#a65628", "#f781bf", "#999999", "#1f78b4", "#33a02c", "#fb9a99",
+                "#fdbf6f", "#cab2d6", "#6a3d9a", "#b15928", "#a6cee3", "#b2df8a"
+            ],
+            
+            // Colors for different states
+            COLOR_IN: "#00f",
+            COLOR_OUT: "#f00",
+            COLOR_NONE: "#ccc",
+            
+            // Chart dimensions
+            WIDTH: 954
+        };
+
+        // Global state
+        let toggledNode = null;
+        let isToggledMode = false;
+
+        // Utility functions
+        function levelColorScale(level) {
+            return CONFIG.LEVEL_COLORS[level % CONFIG.LEVEL_COLORS.length];
+        }
+
+        function hierarchy(data) {
+            const nodeMap = new Map();
+            data.forEach(d => {
+                nodeMap.set(d.patternID, {
+                    ...d,
+                    children: [],
+                    level: -1
+                });
+            });
+
+            // Calculate dependency levels using topological sort
+            const calculateLevels = () => {
+                const visited = new Set();
+                const visiting = new Set();
+                
+                const dfs = (nodeId) => {
+                    if (visiting.has(nodeId)) {
+                        return 0;
+                    }
+                    if (visited.has(nodeId)) {
+                        return nodeMap.get(nodeId).level;
+                    }
+                    
+                    visiting.add(nodeId);
+                    const node = nodeMap.get(nodeId);
+                    
+                    if (!node.dependenciesDirect || node.dependenciesDirect.length === 0) {
+                        node.level = 0;
+                    } else {
+                        let maxDepLevel = -1;
+                        for (const depId of node.dependenciesDirect) {
+                            if (nodeMap.has(depId)) {
+                                const depLevel = dfs(depId);
+                                maxDepLevel = Math.max(maxDepLevel, depLevel);
+                            }
+                        }
+                        node.level = maxDepLevel + 1;
+                    }
+                    
+                    visiting.delete(nodeId);
+                    visited.add(nodeId);
+                    return node.level;
+                };
+                
+                nodeMap.forEach((node, nodeId) => {
+                    if (!visited.has(nodeId)) {
+                        dfs(nodeId);
+                    }
+                });
+            };
+
+            calculateLevels();
+
+            // Group nodes by level
+            const levelGroups = new Map();
+            nodeMap.forEach(node => {
+                if (!levelGroups.has(node.level)) {
+                    levelGroups.set(node.level, []);
+                }
+                levelGroups.get(node.level).push(node);
+            });
+
+            const maxLevel = Math.max(...Array.from(levelGroups.keys()));
+            
+            const createLevelNode = (level, children) => ({
+                patternID: `Level_${level}`,
+                isVirtual: true,
+                level: level,
+                children: children.sort((a, b) => a.patternID.localeCompare(b.patternID))
+            });
+
+            const root = {
+                patternID: 'Root',
+                isVirtual: true,
+                level: -1,
+                children: []
+            };
+
+            for (let level = 0; level <= maxLevel; level++) {
+                if (levelGroups.has(level)) {
+                    const levelNodes = levelGroups.get(level);
+                    const levelContainer = createLevelNode(level, levelNodes);
+                    root.children.push(levelContainer);
+                }
+            }
+
+            return root;
+        }
+
+        function bilink(root) {
+            const map = new Map(root.leaves().map(d => [d.data.patternID, d]));
+            for (const d of root.leaves()) {
+                d.incoming = [];
+                d.outgoing = [];
+                
+                if (!d.data.isVirtual && d.data.dependenciesDirect) {
+                    d.outgoing = d.data.dependenciesDirect
+                        .map(depId => [d, map.get(depId)])
+                        .filter(([source, target]) => target);
+                }
+            }
+            
+            for (const d of root.leaves()) {
+                for (const o of d.outgoing) {
+                    o[1].incoming.push(o);
+                }
+            }
+            
+            return root;
+        }
+
+        function createTreeTooltipSVG(ruleTree) {
+            if (!ruleTree || ruleTree.length < 2) return null;
+            
+            const rootNode = ruleTree[0];
+            const rootChildren = ruleTree[1];
+            
+            function parseTree(item) {
+                if (Array.isArray(item)) {
+                    if (item.length >= 1) {
+                        const node = item[0];
+                        const children = item.length > 1 ? item[1] : [];
+                        
+                        if (node && typeof node === 'object' && !Array.isArray(node)) {
+                            let nodeText, nodeTag;
+                            if (node.tag === "Hole") {
+                                nodeText = "○";
+                                nodeTag = "Hole";
+                            } else if (node.tag === "Constant" && node.contents) {
+                                nodeText = node.contents.contents || node.contents.tag || "Constant";
+                                nodeTag = node.contents.tag || "Constant";
+                            } else {
+                                nodeText = node.contents || node.tag || "Node";
+                                nodeTag = node.tag;
+                            }
+                            
+                            const result = {
+                                name: nodeText,
+                                tag: nodeTag,
+                                nodeType: node.tag,
+                                children: []
+                            };
+                            
+                            if (Array.isArray(children)) {
+                                for (const child of children) {
+                                    const parsedChild = parseTree(child);
+                                    if (parsedChild) result.children.push(parsedChild);
+                                }
+                            }
+                            return result;
+                        }
+                    }
+                } else if (item && typeof item === 'object') {
+                    let nodeText, nodeTag, nodeType;
+                    if (item.tag === "Hole") {
+                        nodeText = "○";
+                        nodeTag = "Hole";
+                        nodeType = "Hole";
+                    } else if (item.tag === "Constant" && item.contents) {
+                        nodeText = item.contents.contents || item.contents.tag || "Constant";
+                        nodeTag = item.contents.tag || "Constant";
+                        nodeType = "Constant";
+                    } else {
+                        nodeText = item.contents || item.tag || "Node";
+                        nodeTag = item.tag;
+                        nodeType = item.tag;
+                    }
+                    
+                    return {
+                        name: nodeText,
+                        tag: nodeTag,
+                        nodeType: nodeType,
+                        children: []
+                    };
+                }
+                return null;
+            }
+            
+            let treeData;
+            if (rootNode.tag === "Hole") {
+                treeData = {
+                    name: "○",
+                    tag: "Hole",
+                    nodeType: "Hole",
+                    children: []
+                };
+            } else if (rootNode.tag === "Constant" && rootNode.contents) {
+                treeData = {
+                    name: rootNode.contents.contents || rootNode.contents.tag || "Constant",
+                    tag: rootNode.contents.tag || "Constant",
+                    nodeType: "Constant",
+                    children: []
+                };
+            } else {
+                treeData = {
+                    name: rootNode.contents || rootNode.tag || "Root",
+                    tag: rootNode.tag,
+                    nodeType: rootNode.tag,
+                    children: []
+                };
+            }
+            
+            if (Array.isArray(rootChildren)) {
+                for (const child of rootChildren) {
+                    const parsedChild = parseTree(child);
+                    if (parsedChild) treeData.children.push(parsedChild);
+                }
+            }
+            
+            function calculateTreeDimensions(root) {
+                const hierarchy = d3.hierarchy(root);
+                const maxDepth = hierarchy.height;
+                const leaves = hierarchy.leaves().length;
+                
+                const minWidth = 300;
+                const minHeight = 200;
+                const nodeWidth = 100;
+                const nodeHeight = 60;
+                
+                const calculatedWidth = Math.max(minWidth, leaves * nodeWidth);
+                const calculatedHeight = Math.max(minHeight, (maxDepth + 1) * nodeHeight + 120);
+                
+                return {
+                    width: calculatedWidth,
+                    height: calculatedHeight,
+                    maxDepth
+                };
+            }
+            
+            const dimensions = calculateTreeDimensions(treeData);
+            const treeWidth = dimensions.width;
+            const treeHeight = dimensions.height;
+            const fontSize = 11;
+            
+            const treeSvg = d3.create("svg")
+                .attr("width", treeWidth)
+                .attr("height", treeHeight)
+                .style("background", "rgba(0, 0, 0, 0.9)")
+                .style("border-radius", "5px");
+            
+            const treeLayout = d3.tree()
+                .size([treeWidth - 40, treeHeight - 60])
+                .separation((a, b) => {
+                    const aWidth = a.data.name.length * 7 + 16;
+                    const bWidth = b.data.name.length * 7 + 16;
+                    const minSeparation = (aWidth + bWidth) / 2 + 10;
+                    return Math.max(1, minSeparation / 80);
+                });
+            
+            const hierarchyTree = d3.hierarchy(treeData);
+            const treeNodes = treeLayout(hierarchyTree);
+            
+            const g = treeSvg.append("g")
+                .attr("transform", "translate(20, 30)");
+            
+            // Add links
+            g.selectAll(".tree-link")
+                .data(treeNodes.links())
+                .enter().append("line")
+                .attr("class", "tree-link")
+                .attr("x1", d => d.source.x)
+                .attr("y1", d => d.source.y)
+                .attr("x2", d => d.target.x)
+                .attr("y2", d => d.target.y)
+                .style("stroke", "#999")
+                .style("stroke-width", 1.5);
+            
+            // Add nodes
+            const node = g.selectAll(".tree-node")
+                .data(treeNodes.descendants())
+                .enter().append("g")
+                .attr("class", "tree-node")
+                .attr("transform", d => `translate(${d.x},${d.y})`);
+            
+            // Add background shapes
+            node.each(function(d) {
+                const nodeElement = d3.select(this);
+                const textLength = d.data.name.length;
+                const nodeWidth = Math.max(textLength * 7 + 16, 30);
+                const nodeHeight = fontSize + 8;
+                
+                if (d.data.nodeType !== "Hole") {
+                    nodeElement.append("rect")
+                        .attr("width", nodeWidth)
+                        .attr("height", nodeHeight)
+                        .attr("x", -nodeWidth / 2)
+                        .attr("y", -nodeHeight / 2)
+                        .attr("rx", 4)
+                        .style("fill", d => {
+                            if (!d.data.tag) return "rgba(204, 204, 204, 0.8)";
+                            switch(d.data.tag) {
+                                case "Prep": return "rgba(255, 107, 107, 0.8)";
+                                case "Prol": return "rgba(78, 205, 196, 0.8)"; 
+                                case "Term": return "rgba(69, 183, 209, 0.8)";
+                                case "Constant": return "rgba(100, 200, 100, 0.8)";
+                                default: return "rgba(254, 202, 87, 0.8)";
+                            }
+                        })
+                        .style("stroke", "#fff")
+                        .style("stroke-width", 1.5);
+                }
+            });
+            
+            // Add text labels
+            node.append("text")
+                .attr("text-anchor", "middle")
+                .attr("dy", "0.35em")
+                .style("font-family", "monospace")
+                .style("font-size", `${fontSize}px`)
+                .style("fill", "white")
+                .style("font-weight", "bold")
+                .style("text-shadow", "1px 1px 1px rgba(0,0,0,0.8)")
+                .text(d => d.data.name);
+            
+            return treeSvg.node();
+        }
+
+        function createChart(data) {
+            const radius = CONFIG.WIDTH / 2;
+            
+            const tree = d3.cluster()
+                .size([2 * Math.PI, radius - 100]);
+            const root = tree(bilink(d3.hierarchy(data)
+                .sort((a, b) => d3.ascending(a.height, b.height) || d3.ascending(parseInt(a.data.patternID), parseInt(b.data.patternID)))));
+
+            const actualNodes = root.leaves().filter(d => !d.data.isVirtual);
+            
+            const svg = d3.create("svg")
+                .attr("width", CONFIG.WIDTH)
+                .attr("height", CONFIG.WIDTH)
+                .attr("viewBox", [-CONFIG.WIDTH / 2, -CONFIG.WIDTH / 2, CONFIG.WIDTH, CONFIG.WIDTH])
+                .style("max-width", "100%")
+                .style("height", "auto")
+                .style("font", "10px sans-serif");
+
+            // Create tooltip
+            const tooltip = d3.select("body").append("div")
+                .attr("class", "tree-tooltip")
+                .style("position", "absolute")
+                .style("visibility", "hidden")
+                .style("padding", "0")
+                .style("border-radius", "5px")
+                .style("z-index", "1000")
+                .style("pointer-events", "none");
+
+            // Create gradients
+            const defs = svg.append("defs");
+            const allEdges = actualNodes.flatMap(leaf => leaf.outgoing);
+
+            allEdges.forEach((edge, i) => {
+                const [source, target] = edge;
+                
+                const gradient = defs.append("linearGradient")
+                    .attr("id", `gradient-${i}`)
+                    .attr("gradientUnits", "userSpaceOnUse")
+                    .attr("x1", source.y * Math.cos(source.x - Math.PI/2))
+                    .attr("y1", source.y * Math.sin(source.x - Math.PI/2))
+                    .attr("x2", target.y * Math.cos(target.x - Math.PI/2))
+                    .attr("y2", target.y * Math.sin(target.x - Math.PI/2));
+                
+                gradient.append("stop")
+                    .attr("offset", "0%")
+                    .attr("stop-color", CONFIG.GRADIENT_SOURCE_COLOR);
+                
+                gradient.append("stop")
+                    .attr("offset", CONFIG.GRADIENT_MIDDLE_START)
+                    .attr("stop-color", CONFIG.GRADIENT_MIDDLE_COLOR);
+                
+                gradient.append("stop")
+                    .attr("offset", CONFIG.GRADIENT_MIDDLE_END)
+                    .attr("stop-color", CONFIG.GRADIENT_MIDDLE_COLOR);
+                
+                gradient.append("stop")
+                    .attr("offset", "100%")
+                    .attr("stop-color", CONFIG.GRADIENT_TARGET_COLOR);
+            });
+
+            // Create nodes
+            const node = svg.append("g")
+                .selectAll()
+                .data(actualNodes)
+                .join("g")
+                .attr("transform", d => `rotate(${d.x * 180 / Math.PI - 90}) translate(${d.y},0)`)
+                .append("text")
+                .attr("dy", "0.31em")
+                .attr("x", d => d.x < Math.PI ? 6 : -6)
+                .attr("text-anchor", d => d.x < Math.PI ? "start" : "end")
+                .attr("transform", d => d.x >= Math.PI ? "rotate(180)" : null)
+                .attr("fill", d => levelColorScale(d.data.level))
+                .text(d => d.data.patternID)
+                .each(function(d) { 
+                    d.text = this; 
+                    d.originalColor = levelColorScale(d.data.level);
+                })
+                .style("cursor", "pointer")
+                .on("click", function(event, d) {
+                    handleNodeClick(event, d, this, tooltip, svg, actualNodes);
+                })
+                .on("mouseover", function(event, d) {
+                    handleNodeMouseOver(event, d, this);
+                })
+                .on("mouseout", function(event, d) {
+                    handleNodeMouseOut(event, d, this, tooltip);
+                })
+                .on("mousemove", function(event, d) {
+                    handleNodeMouseMove(event, d, tooltip);
+                })
+                .call(text => text.append("title").text(d => `${d.data.patternID}
+Level: ${d.data.level}
+Dependencies: ${d.data.dependenciesDirect ? d.data.dependenciesDirect.length : 0}
+Dependents: ${d.data.dependentsDirect ? d.data.dependentsDirect.length : 0}
+Global Frequency: ${d.data.globalFreq || 0}
+${d.outgoing.length} outgoing connections
+${d.incoming.length} incoming connections
+Click to toggle persistent tree view`));
+
+            // Create links
+            const line = d3.lineRadial()
+                .curve(d3.curveBundle.beta(0.85))
+                .radius(d => d.y)
+                .angle(d => d.x);
+
+            const link = svg.append("g")
+                .attr("fill", "none")
+                .selectAll()
+                .data(allEdges)
+                .join("path")
+                .style("mix-blend-mode", "normal")
+                .attr("stroke", (d, i) => `url(#gradient-${i})`)
+                .attr("stroke-width", CONFIG.EDGE_WIDTH)
+                .attr("stroke-opacity", CONFIG.EDGE_OPACITY)
+                .attr("d", ([i, o]) => line(i.path(o)))
+                .each(function(d, i) { 
+                    d.path = this; 
+                    d.gradientId = `gradient-${i}`;
+                });
+
+            // Store references for event handlers
+            window.currentChart = { link, actualNodes };
+
+            // Add background click handler
+            svg.on("click", function(event) {
+                if (event.target === this && isToggledMode) {
+                    clearToggleState(tooltip);
+                }
+            });
+
+            return svg.node();
+        }
+
+        // Event handlers
+        function handleNodeClick(event, d, element, tooltip, svg, actualNodes) {
+            if (toggledNode === d) {
+                clearToggleState(tooltip);
+            } else {
+                if (toggledNode) {
+                    d3.select(toggledNode.text)
+                        .attr("font-weight", null)
+                        .style("text-decoration", "none");
+                }
+                
+                toggledNode = d;
+                isToggledMode = true;
+                
+                d3.select(element)
+                    .attr("font-weight", "bold")
+                    .style("text-decoration", "underline");
+                
+                if (d.data.ruleTree) {
+                    const treeSvg = createTreeTooltipSVG(d.data.ruleTree);
+                    if (treeSvg) {
+                        tooltip
+                            .style("visibility", "visible")
+                            .html("")
+                            .node().appendChild(treeSvg);
+                        
+                        positionTooltip(d, tooltip, svg);
+                    }
+                }
+                
+                highlightNodeEdges(d);
+            }
+            event.stopPropagation();
+        }
+
+        function handleNodeMouseOver(event, d, element) {
+            if (isToggledMode) return;
+            
+            highlightNodeEdges(d);
+            d3.select(element).attr("font-weight", "bold");
+        }
+
+        function handleNodeMouseOut(event, d, element, tooltip) {
+            if (isToggledMode) return;
+            
+            tooltip.style("visibility", "hidden");
+            d3.select(element).attr("font-weight", null);
+            resetAllEdges();
+        }
+
+        function handleNodeMouseMove(event, d, tooltip) {
+            if (!isToggledMode) {
+                if (d.data.ruleTree) {
+                    const treeSvg = createTreeTooltipSVG(d.data.ruleTree);
+                    if (treeSvg) {
+                        tooltip
+                            .style("visibility", "visible")
+                            .html("")
+                            .node().appendChild(treeSvg);
+                        
+                        tooltip
+                            .style("left", (event.pageX + 10) + "px")
+                            .style("top", (event.pageY - 10) + "px");
+                    }
+                }
+            }
+        }
+
+        function positionTooltip(d, tooltip, svg) {
+            const nodeAngle = d.x;
+            const nodeRadius = d.y;
+            
+            const nodeX = nodeRadius * Math.cos(nodeAngle - Math.PI/2);
+            const nodeY = nodeRadius * Math.sin(nodeAngle - Math.PI/2);
+            
+            const svgElement = svg.node();
+            const svgRect = svgElement.getBoundingClientRect();
+            const svgCenterX = svgRect.left + svgRect.width / 2;
+            const svgCenterY = svgRect.top + svgRect.height / 2;
+            
+            const pageX = svgCenterX + nodeX;
+            const pageY = svgCenterY + nodeY;
+            
+            const offsetDistance = 50;
+            const offsetAngle = nodeAngle - Math.PI/2;
+            const offsetX = Math.cos(offsetAngle) * offsetDistance;
+            const offsetY = Math.sin(offsetAngle) * offsetDistance;
+            
+            let finalX = pageX + offsetX;
+            let finalY = pageY + offsetY;
+            
+            // Keep tooltip on screen
+            const screenWidth = window.innerWidth;
+            const screenHeight = window.innerHeight;
+            const tooltipWidth = 400;
+            const tooltipHeight = 250;
+            
+            if (finalX + tooltipWidth > screenWidth) {
+                finalX = pageX - offsetX - tooltipWidth;
+            }
+            if (finalY + tooltipHeight > screenHeight) {
+                finalY = Math.max(10, finalY - tooltipHeight);
+            }
+            if (finalX < 0) finalX = 10;
+            if (finalY < 0) finalY = 10;
+            
+            tooltip
+                .style("left", finalX + "px")
+                .style("top", finalY + "px");
+        }
+
+        function highlightNodeEdges(d) {
+            if (!window.currentChart) return;
+            
+            const { link } = window.currentChart;
+            
+            link.style("mix-blend-mode", null);
+            
+            d3.selectAll(d.incoming.map(d => d.path))
+                .attr("stroke-opacity", CONFIG.EDGE_OPACITY_HOVER)
+                .attr("stroke-width", CONFIG.EDGE_WIDTH_HOVER)
+                .raise();
+            d3.selectAll(d.incoming.map(([d]) => d.text))
+                .attr("fill", CONFIG.COLOR_OUT)
+                .attr("font-weight", "bold");
+            
+            d3.selectAll(d.outgoing.map(d => d.path))
+                .attr("stroke-opacity", CONFIG.EDGE_OPACITY_HOVER)
+                .attr("stroke-width", CONFIG.EDGE_WIDTH_HOVER)
+                .raise();
+            d3.selectAll(d.outgoing.map(([, d]) => d.text))
+                .attr("fill", CONFIG.COLOR_IN)
+                .attr("font-weight", "bold");
+        }
+
+        function resetAllEdges() {
+            if (!window.currentChart) return;
+            
+            const { link, actualNodes } = window.currentChart;
+            
+            link.style("mix-blend-mode", "normal");
+            
+            link
+                .attr("stroke-opacity", CONFIG.EDGE_OPACITY)
+                .attr("stroke-width", CONFIG.EDGE_WIDTH);
+            
+            actualNodes.forEach(node => {
+                d3.select(node.text)
+                    .attr("fill", node.originalColor)
+                    .attr("font-weight", null);
+            });
+        }
+
+        function clearToggleState(tooltip) {
+            if (toggledNode) {
+                d3.select(toggledNode.text)
+                    .attr("font-weight", null)
+                    .style("text-decoration", "none");
+            }
+            toggledNode = null;
+            isToggledMode = false;
+            tooltip.style("visibility", "hidden");
+            resetAllEdges();
+        }
+
+        // Main execution
+        async function init() {
+            try {
+                
+                
+                const data = {{{dataSet}}};
+                const hierarchicalData = hierarchy(data);
+                const chart = createChart(hierarchicalData);
+                
+                // Replace loading message with chart
+                const container = document.getElementById('chart-container');
+                container.innerHTML = '';
+                container.appendChild(chart);
+                
+            } catch (error) {
+                console.error('Error initializing chart:', error);
+                document.getElementById('chart-container').innerHTML = 
+                    `<div class="error">Error loading visualization: ${error.message}</div>`;
+            }
+        }
+
+        // Initialize when DOM is ready
+        document.addEventListener('DOMContentLoaded', init);
+    </script>
+</body>
+</html>

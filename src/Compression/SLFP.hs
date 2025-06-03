@@ -59,6 +59,7 @@ data Abstraction a
   = Constant a
   | Var String
   | (Abstraction a) `With` (String, [Abstraction a])
+  | Hole
   deriving (Show, Eq, Ord,Generic)
 
 instance (FromJSON a) =>  FromJSON (Abstraction a)
@@ -68,6 +69,7 @@ instance (FromJSON a) => FromJSONKey (Abstraction a)
 
 
 instance Pretty a => Pretty (Abstraction a) where
+  pretty (Hole) = "◯"
   pretty  (Constant x) = pretty x
   pretty (Var x) = pretty x 
   pretty (x `With` (s,xs)) = pretty x <+> "{" <> pretty s <> "}"<+> 
@@ -78,11 +80,13 @@ instance Size (Abstraction a) where
     Constant _ -> 1
     Var _ -> 1
     _ `With` (_, xs) -> 2 + length xs
+    Hole  -> 0
 
 
 getVariables :: Abstraction a -> Set String
 getVariables = \case 
   Constant _ -> mempty 
+  Hole -> mempty
   Var x -> Set.singleton x 
   x `With` (_,ys) -> foldMap getVariables (x:ys)
 
@@ -91,6 +95,7 @@ getPatternOrRules = \case
   Constant x -> Set.singleton $ Left x
   Var x -> Set.singleton $ Right x
   x `With` (_, ys) -> foldMap getPatternOrRules (x:ys)
+  Hole -> mempty
 
 class a `CachedBy` b where
   retrieve :: Map.Map b a
@@ -461,6 +466,9 @@ deCompressTree dP dM dA t@(Node r ts) = case r of
    where
     groupings = inferArity dP dM dA <$> useMeta meta x as
     meta = dM m
+  s@Hole -> case ts of 
+      [] -> t
+      _ -> error "deCompressTree: Hole found in the branching node, this should not happen"
 
 
 

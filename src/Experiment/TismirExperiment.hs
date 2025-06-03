@@ -4,7 +4,7 @@ module Experiment.TismirExperiment (
     -- * (What are the patterns?) visualizing pattern as tree fragment
     patternAsComputation,
     patternSizeExpanded,
-    Computation (..),
+
 
     -- * (Pattern dependencies)
     patternDependents,
@@ -41,7 +41,7 @@ import qualified Data.Map.Strict as Map
 import Data.Maybe
 import Data.Set (Set)
 import qualified Data.Set as Set
-import Experiment.Computation
+
 import GHC.Generics
 
 import Compression.TreeUtils (sizeTree)
@@ -66,13 +66,19 @@ type PatternID = String
 
 patternAsComputation :: (_) => SLFP r k -> PatternID -> Tree (Abstraction r)
 patternAsComputation slfp patId =
+    
     fixedPoint
-        ( deCompressTree
-            (globalPatterns slfp Map.!)
-            (globalMetas slfp Map.!)
-            (arities slfp Map.!)
-        )
-        $ Node (Var patId) []
+            ( deCompressTree
+                (globalPatterns slfp Map.!)
+                (globalMetas slfp Map.!)
+                (arities slfp Map.!)
+            )
+        $ startingTree
+  where
+    startingTree = Node (Var patId) 
+        $ replicate (inferArity 
+            (globalPatterns slfp Map.!) (globalMetas slfp Map.!) (arities slfp Map.!) (Var patId)) 
+        $ Node Hole []
 
 patternSizeExpanded :: (_) => SLFP r k -> PatternID -> Int
 patternSizeExpanded slfp = sizeTree . patternAsComputation slfp

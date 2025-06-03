@@ -23,6 +23,7 @@ import Grammar.Rhythm.RhythmGrammar (RhythmNT, RhythmRule, RhythmTerminal)
 import Data.Set (Set)
 import Preprocessing.Preprocess
 import qualified Data.Set as Set
+import Data.Tree
 
 proofTreeFolderPath :: String
 proofTreeFolderPath = "experiment/data/ProofTrees"
@@ -113,7 +114,8 @@ data PatternInfo r k = PatternInfo {
     sizeExpanded :: Int,
     occuranceInCorpus :: Set k,
     impact :: Double,
-    depths :: [Double]
+    depths :: [Double],
+    ruleTree :: Tree (Abstraction r)
 }
     deriving (Generic, Show)
 
@@ -130,7 +132,8 @@ mkPatternInfo slfp pId = PatternInfo {
     sizeExpanded = patternSizeExpanded slfp pId,
     occuranceInCorpus = patternOccuranceG slfp pId,
     depths = patternDepthInCorpus slfp Map.! pId,
-    impact = patternImpact (patternFreqInCorpus slfp Map.!) (Set.toList . directDependents slfp) pId
+    impact = patternImpact (patternFreqInCorpus slfp Map.!) (Set.toList . directDependents slfp) pId,
+    ruleTree = patternAsComputation slfp pId
     }
 
 
