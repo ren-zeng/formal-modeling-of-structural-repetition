@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -7,15 +7,49 @@
     <script src="https://d3js.org/d3.v7.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
     <style>
-        * {
-            box-sizing: border-box;
-        }
         body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
             margin: 0;
-            padding: 0;
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-            overflow-x: hidden;
+            padding: 20px;
+            background-color: #f5f5f5;
         }
+        
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background-color: white;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            padding: 20px;
+        }
+        
+        .header {
+            color: grey;
+            font: 13px/25.5px var(--sans-serif);
+            text-transform: uppercase;
+            margin-bottom: 20px;
+        }
+        
+        h1 {
+            font-size: 2em;
+            margin-bottom: 10px;
+            color: #333;
+        }
+        
+        .description {
+            margin-bottom: 30px;
+            color: #666;
+            line-height: 1.6;
+        }
+        
+        #chart-container {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 600px;
+            position: relative;
+        }
+        
         #myPlot {
             display: flex;
             flex-direction: column;
@@ -23,15 +57,15 @@
             justify-content: center;
             position: relative;
             width: 100%;
-            max-width: 1000px;
+            max-width: 1200px;
             margin: 0 auto;
-            padding: 10px;
         }
+        
         svg {
             width: 100%;
             height: auto;
-            max-height: 100vh;
         }
+        
         .tooltip {
             position: absolute;
             background-color: white;
@@ -43,6 +77,7 @@
             z-index: 100;
             max-width: 200px;
         }
+        
         .button-container {
             position: absolute;
             top: 10px;
@@ -52,6 +87,7 @@
             flex-wrap: wrap;
             z-index: 10;
         }
+        
         @media (max-width: 768px) {
             .button-container {
                 position: static;
@@ -59,9 +95,10 @@
                 justify-content: center;
             }
         }
+        
         .save-button {
             padding: 8px 16px;
-            background-color: #69b3a2;
+            background-color: #3498db;
             color: white;
             border: none;
             border-radius: 4px;
@@ -69,39 +106,71 @@
             font-size: 14px;
             touch-action: manipulation;
         }
+        
         .save-button:hover {
-            background-color: #85c7b5;
+            background-color: #2980b9;
         }
+        
         .feature-bar {
             transition: opacity 0.2s, stroke-width 0.2s;
         }
+        
         .feature-bar.highlighted {
             stroke-width: 2px;
             stroke: #000;
         }
+        
         .category-legend-item, .feature-legend-item {
             cursor: pointer;
         }
+        
         .legend-rect.highlighted {
             stroke-width: 1px;
             stroke: #000;
         }
+        
         .legend-container {
             max-height: 300px;
             overflow-y: auto;
             border: 1px solid #eee;
             padding-right: 10px;
         }
+        
+        .loading {
+            text-align: center;
+            padding: 50px;
+            color: #999;
+        }
+        
+        .error {
+            color: #d32f2f;
+            background-color: #ffebee;
+            padding: 15px;
+            border-radius: 4px;
+            margin: 20px 0;
+        }
     </style>
 </head>
-
 <body>
-    <div id="myPlot">
-        <div class="button-container">
-            <button class="save-button" onclick="saveSVG()">Save as SVG</button>
-            <button class="save-button" onclick="savePDF()">Save as PDF</button>
+    <div class="container">
+        <div class="header">
+            <h1>Jazz Harmony Rule Distribution (Stacked)</h1>
+        </div>
+        
+        <div class="description">
+            Stacked bar chart visualization showing the composition of Rule Category by categories and features, with rule depth distribution analysis.
+        </div>
+        
+        <div id="chart-container">
+            <div id="myPlot">
+                <div class="button-container">
+                    <button class="save-button" onclick="saveSVG()">Save as SVG</button>
+                    <button class="save-button" onclick="savePDF()">Save as PDF</button>
+                </div>
+            </div>
         </div>
     </div>
+
     <script>
     // Set margins and dimensions
     const margin = {top: 50, right: 150, bottom: 50, left: 150};

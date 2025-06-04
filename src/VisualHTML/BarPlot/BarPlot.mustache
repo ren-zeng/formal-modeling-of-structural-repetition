@@ -1,22 +1,56 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>bar-plot</title>
+    <title>{{figureName}}</title>
     <script src="https://d3js.org/d3.v7.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
     <style>
-        * {
-            box-sizing: border-box;
-        }
         body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
             margin: 0;
-            padding: 0;
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-            overflow-x: hidden;
+            padding: 20px;
+            background-color: #f5f5f5;
         }
+        
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background-color: white;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            padding: 20px;
+        }
+        
+        .header {
+            color: grey;
+            font: 13px/25.5px var(--sans-serif);
+            text-transform: uppercase;
+            margin-bottom: 20px;
+        }
+        
+        h1 {
+            font-size: 2em;
+            margin-bottom: 10px;
+            color: #333;
+        }
+        
+        .description {
+            margin-bottom: 30px;
+            color: #666;
+            line-height: 1.6;
+        }
+        
+        #chart-container {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 600px;
+            position: relative;
+        }
+        
         #myPlot {
             display: flex;
             flex-direction: column;
@@ -26,13 +60,14 @@
             width: 100%;
             max-width: 1000px;
             margin: 0 auto;
-            padding: 10px;
         }
+        
         svg {
             width: 100%;
             height: auto;
             max-height: 100vh;
         }
+        
         .tooltip {
             position: absolute;
             background-color: white;
@@ -44,6 +79,7 @@
             z-index: 100;
             max-width: 200px;
         }
+        
         .button-container {
             position: absolute;
             top: 10px;
@@ -53,6 +89,7 @@
             flex-wrap: wrap;
             z-index: 10;
         }
+        
         @media (max-width: 768px) {
             .button-container {
                 position: static;
@@ -60,9 +97,10 @@
                 justify-content: center;
             }
         }
+        
         .save-button {
             padding: 8px 16px;
-            background-color: #69b3a2;
+            background-color: #3498db;
             color: white;
             border: none;
             border-radius: 4px;
@@ -70,19 +108,47 @@
             font-size: 14px;
             touch-action: manipulation;
         }
+        
         .save-button:hover {
-            background-color: #85c7b5;
+            background-color: #2980b9;
+        }
+        
+        .loading {
+            text-align: center;
+            padding: 50px;
+            color: #999;
+        }
+        
+        .error {
+            color: #d32f2f;
+            background-color: #ffebee;
+            padding: 15px;
+            border-radius: 4px;
+            margin: 20px 0;
         }
     </style>
 </head>
 
 <body>
-    <div id="myPlot">
-        <div class="button-container">
-            <button class="save-button" onclick="saveSVG()">Save as SVG</button>
-            <button class="save-button" onclick="savePDF()">Save as PDF</button>
+    <div class="container">
+        <div class="header">
+            <h1>{{figureName}}</h1>
+        </div>
+        
+        <div class="description">
+            Bar chart visualization showing the distribution of {{xLabel}} by {{yLabel}}.
+        </div>
+        
+        <div id="chart-container">
+            <div id="myPlot">
+                <div class="button-container">
+                    <button class="save-button" onclick="saveSVG()">Save as SVG</button>
+                    <button class="save-button" onclick="savePDF()">Save as PDF</button>
+                </div>
+            </div>
         </div>
     </div>
+
     <script>
     // Function to save as SVG
     function saveSVG() {

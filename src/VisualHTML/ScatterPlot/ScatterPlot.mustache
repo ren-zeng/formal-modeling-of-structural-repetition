@@ -1,22 +1,54 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>scatter</title>
+    <title>{{figureName}}</title>
     <script src="https://d3js.org/d3.v7.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
     <style>
-        * {
-            box-sizing: border-box;
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background-color: #f5f5f5;
         }
 
-        body {
-            margin: 0;
-            padding: 0;
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-            overflow-x: hidden;
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background-color: white;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+            padding: 20px;
+        }
+
+        .header {
+            color: grey;
+            font: 13px/25.5px var(--sans-serif);
+            text-transform: uppercase;
+            margin-bottom: 20px;
+        }
+
+        h1 {
+            font-size: 2em;
+            margin-bottom: 10px;
+            color: #333;
+        }
+
+        .description {
+            margin-bottom: 30px;
+            color: #666;
+            line-height: 1.6;
+        }
+
+        #chart-container {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 600px;
+            position: relative;
         }
 
         #scatter-plot {
@@ -28,7 +60,6 @@
             width: 100%;
             max-width: 1000px;
             margin: 0 auto;
-            padding: 10px;
         }
 
         svg {
@@ -69,7 +100,7 @@
 
         .save-button {
             padding: 8px 16px;
-            background-color: #69b3a2;
+            background-color: #3498db;
             color: white;
             border: none;
             border-radius: 4px;
@@ -79,7 +110,7 @@
         }
 
         .save-button:hover {
-            background-color: #85c7b5;
+            background-color: #2980b9;
         }
 
         .histogram-bar {
@@ -90,16 +121,43 @@
         .histogram-bar:hover {
             fill: #4a7a6e;
         }
+
+        .loading {
+            text-align: center;
+            padding: 50px;
+            color: #999;
+        }
+
+        .error {
+            color: #d32f2f;
+            background-color: #ffebee;
+            padding: 15px;
+            border-radius: 4px;
+            margin: 20px 0;
+        }
     </style>
 </head>
 
 <body>
-    <div id="scatter-plot">
-        <div class="button-container">
-            <button class="save-button" onclick="saveSVG()">Save as SVG</button>
-            <button class="save-button" onclick="savePDF()">Save as PDF</button>
+    <div class="container">
+        <div class="header">
+            <h1>{{figureName}}</h1>
+        </div>
+
+        <div class="description">
+            Scatter plot visualization showing the relationship between {{xLabel}} and {{yLabel}}.
+        </div>
+
+        <div id="chart-container">
+            <div id="scatter-plot">
+                <div class="button-container">
+                    <button class="save-button" onclick="saveSVG()">Save as SVG</button>
+                    <button class="save-button" onclick="savePDF()">Save as PDF</button>
+                </div>
+            </div>
         </div>
     </div>
+
     <script>
         // Function to save as SVG
         function saveSVG() {
@@ -127,10 +185,10 @@
                 // Method 1: Try direct jsPDF SVG support first
                 try {
                     const { jsPDF } = window.jspdf;
-                    
+
                     let svgWidth, svgHeight;
                     const viewBox = svgElement.getAttribute('viewBox');
-                    
+
                     if (viewBox) {
                         const viewBoxValues = viewBox.split(' ');
                         svgWidth = parseFloat(viewBoxValues[2]);
@@ -149,7 +207,7 @@
                     });
 
                     const svgString = new XMLSerializer().serializeToString(svgElement);
-                    
+
                     if (pdf.svg) {
                         pdf.svg(svgString, {
                             x: 0,
@@ -167,18 +225,18 @@
 
                 // Method 2: Enhanced canvas conversion
                 const svgClone = svgElement.cloneNode(true);
-                
+
                 // Remove problematic elements
                 const problematicElements = svgClone.querySelectorAll('foreignObject, switch, metadata');
                 problematicElements.forEach(el => el.remove());
-                
+
                 // Inline essential styles only
                 const allElements = svgClone.querySelectorAll('*');
                 allElements.forEach(element => {
                     try {
                         const computedStyle = window.getComputedStyle(element);
                         let styleStr = '';
-                        
+
                         const importantProps = ['fill', 'stroke', 'stroke-width', 'opacity', 'font-family', 'font-size', 'font-weight'];
                         importantProps.forEach(prop => {
                             const value = computedStyle.getPropertyValue(prop);
@@ -186,7 +244,7 @@
                                 styleStr += `${prop}:${value};`;
                             }
                         });
-                        
+
                         if (styleStr) {
                             element.setAttribute('style', styleStr);
                         }
@@ -197,7 +255,7 @@
 
                 let svgWidth, svgHeight;
                 const viewBox = svgElement.getAttribute('viewBox');
-                
+
                 if (viewBox) {
                     const viewBoxValues = viewBox.split(' ');
                     svgWidth = parseFloat(viewBoxValues[2]);
@@ -215,7 +273,7 @@
                 const scaleFactor = 1.5;
                 canvas.width = svgWidth * scaleFactor;
                 canvas.height = svgHeight * scaleFactor;
-                
+
                 ctx.fillStyle = 'white';
                 ctx.fillRect(0, 0, canvas.width, canvas.height);
                 ctx.scale(scaleFactor, scaleFactor);
@@ -227,7 +285,7 @@
                 img.onload = function () {
                     try {
                         clearTimeout(timeout);
-                        
+
                         ctx.drawImage(img, 0, 0, svgWidth, svgHeight);
 
                         let imgData;
@@ -236,7 +294,7 @@
                         } catch (canvasError) {
                             throw new Error('Canvas to PNG conversion failed: ' + canvasError.message);
                         }
-                        
+
                         if (!imgData || imgData === 'data:,' || imgData.length < 1000 || !imgData.startsWith('data:image/png')) {
                             throw new Error('Generated image data is invalid or too small');
                         }
@@ -252,11 +310,11 @@
 
                         pdf.addImage(imgData, 'PNG', 0, 0, svgWidth, svgHeight, '', 'FAST');
                         pdf.save('{{figureName}}.pdf');
-                        
+
                     } catch (error) {
                         clearTimeout(timeout);
                         console.error('Error in canvas method:', error);
-                        
+
                         // Method 3: Fallback to text-only PDF
                         try {
                             const { jsPDF } = window.jspdf;
@@ -268,7 +326,7 @@
                             pdf.text('Please use the SVG export option for full fidelity.', 20, 70);
                             pdf.text('Generated on: ' + new Date().toLocaleString(), 20, 90);
                             pdf.save('{{figureName}} - Text Only.pdf');
-                            
+
                             alert('Complex visualization exported as text-only PDF. For the full visualization, please use SVG export.');
                         } catch (fallbackError) {
                             alert('PDF export failed completely. Please use SVG export: ' + error.message);
@@ -276,7 +334,7 @@
                     }
                 };
 
-                img.onerror = function(error) {
+                img.onerror = function (error) {
                     clearTimeout(timeout);
                     console.error('Image loading failed:', error);
                     alert('Failed to convert SVG to image. This visualization may be too complex for PDF export. Please use SVG export instead.');
@@ -288,16 +346,16 @@
                         .replace(/(\r\n|\n|\r)/gm, '')
                         .replace(/\s+/g, ' ')
                         .trim();
-                    
+
                     const svgBlob = new Blob([cleanSvgString], { type: 'image/svg+xml;charset=utf-8' });
                     const url = URL.createObjectURL(svgBlob);
-                    
+
                     img.src = url;
-                    
+
                     setTimeout(() => {
                         URL.revokeObjectURL(url);
                     }, 25000);
-                    
+
                 } catch (encodingError) {
                     clearTimeout(timeout);
                     console.error('SVG encoding failed:', encodingError);
@@ -333,11 +391,11 @@
         // Get dimensions based on screen size
         const dims = getChartDimensions();
         const { width, height, margin } = dims;
-        
+
         // Calculate histogram dimensions for viewBox adjustments
         const histogramHeight = height * 0.15;
         const histogramMargin = 0;
-        
+
         // Create the SVG container with adjusted dimensions to fit histograms
         const svg = d3.select("#scatter-plot")
             .append("svg")
@@ -359,19 +417,18 @@
             // Calculate histogram dimensions
             const histogramHeight = height * 0.15; // 15% of the main plot height
             const histogramMargin = 0; // Space between main plot and histograms
-            
+
             // Create scales
             const x = d3.scaleLinear()
                 .domain([0, d3.max(data, d => d.{{_X}})])
                 .range([0, width]);
-             
-            
+
 
             const y = d3.scaleLinear()
                 .domain([0, d3.max(data, d => d.{{_Y}})])
                 .range([height, 0]);
-              
-                
+
+
             // Generate tick values to ensure consistency between plots and histograms
             const xTicks = x.ticks(15);
             const yTicks = y.ticks(15);
@@ -431,16 +488,16 @@
                 .thresholds(xTicks); // Use the same tick values as the main x-axis
 
             const xBins = xHistogram(data);
-            
+
             // Determine y-scale for X histogram
             const xHistY = d3.scaleLinear()
                 .domain([0, d3.max(xBins, d => d.length)])
                 .range([0, histogramHeight]); // For downward bars
-                
+
             // Create X histogram container
             const xHistGroup = svg.append("g")
-                .attr("transform", `translate(0, ${height + histogramMargin/2})`);
-            
+                .attr("transform", `translate(0, ${height + histogramMargin / 2})`);
+
             // Draw X histogram bars - now facing downward
             const xHistBars = xHistGroup.selectAll("rect")
                 .data(xBins)
@@ -450,7 +507,7 @@
                 .attr("width", d => Math.max(0, x(d.x1) - x(d.x0) - 1))
                 .attr("y", 0) // Start at 0 to go downward
                 .attr("height", d => xHistY(d.length));
-            
+
             // Add frequency numbers to bars (for bars with enough width and non-zero frequency)
             xHistGroup.selectAll("text")
                 .data(xBins)
@@ -462,7 +519,7 @@
                 .attr("fill", "#333")
                 .style("font-size", histogramLabelSize)
                 .text(d => d.length);
-                
+
             // Create Y-axis histogram
             const yHistogram = d3.histogram()
                 .value(d => d.{{_Y}})
@@ -470,16 +527,16 @@
                 .thresholds(yTicks); // Use the same tick values as the main y-axis
 
             const yBins = yHistogram(data);
-            
+
             // Determine x-scale for Y histogram
             const yHistX = d3.scaleLinear()
                 .domain([0, d3.max(yBins, d => d.length)])
                 .range([0, histogramHeight]); // Scale for leftward bars
-                
+
             // Create Y histogram container - position at the left of the y-axis
             const yHistGroup = svg.append("g")
-                .attr("transform", `translate(${-histogramMargin/2}, 0)`);
-                
+                .attr("transform", `translate(${-histogramMargin / 2}, 0)`);
+
             // Draw Y histogram bars (horizontal) - facing left and aligning with y-axis
             const yHistBars = yHistGroup.selectAll("rect")
                 .data(yBins)
@@ -489,7 +546,7 @@
                 .attr("width", d => yHistX(d.length))
                 .attr("y", d => y(d.x1)) // Align with the y-axis values
                 .attr("height", d => Math.max(0, y(d.x0) - y(d.x1) - 1));
-                
+
             // Add frequency numbers to bars (for bars with enough height and non-zero frequency)
             yHistGroup.selectAll(".hist-label")
                 .data(yBins)
@@ -504,16 +561,16 @@
                 .text(d => d.length);
 
             // Add dots
-            const tooltipContent = d => 
-                                    `${d.{{_hoverInfo}}}<br>
+            const tooltipContent = d =>
+                `${d.{{_hoverInfo}}}<br>
                                     {{xLabel}}: ${d.{{_X}}} <br>
                                     {{yLabel}}: ${d.{{_Y}}}`;
-              
+
             svg.selectAll("circle")
                 .data(data)
                 .join("circle")
-                .attr("cx", d => x(d.{{_X}} + Math.random() * 0.1 ))
-                .attr("cy", d => y(d.{{_Y}} + Math.random() * 0.1 ))
+                .attr("cx", d => x(d.{{_X}} + Math.random() * 0.1))
+                .attr("cy", d => y(d.{{_Y}} + Math.random() * 0.1))
                 .attr("r", width < 500 ? 4 : 6)
                 .style("fill", "grey")
                 .style("opacity", 0.7)
@@ -526,13 +583,13 @@
                         .duration(200)
                         .style("opacity", .9);
 
-                    
-                    
+
+
                     // Calculate tooltip position relative to the visualization container
                     const containerRect = document.getElementById('scatter-plot').getBoundingClientRect();
-                    const tooltipX = event.pageX  + 10;
+                    const tooltipX = event.pageX + 10;
                     const tooltipY = event.pageY - 28;
-                    
+
                     tooltip.html(tooltipContent(d))
                         .style("left", tooltipX + "px")
                         .style("top", tooltipY + "px");
@@ -556,14 +613,13 @@
                         .duration(200)
                         .style("opacity", .9);
 
-                    
-                   
+
 
                     // Calculate tooltip position relative to the visualization container for touch events
                     const containerRect = document.getElementById('scatter-plot').getBoundingClientRect();
                     const tooltipX = event.touches[0].pageX - containerRect.left + 10;
                     const tooltipY = event.touches[0].pageY - containerRect.top - 28;
-                    
+
                     tooltip.html(tooltipContent(d))
                         .style("left", tooltipX + "px")
                         .style("top", tooltipY + "px");

@@ -1,22 +1,54 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>scatter</title>
+    <title>Piece-wise compression (Rhythm)</title>
     <script src="https://d3js.org/d3.v7.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
     <style>
-        * {
-            box-sizing: border-box;
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background-color: #f5f5f5;
         }
 
-        body {
-            margin: 0;
-            padding: 0;
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-            overflow-x: hidden;
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background-color: white;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+            padding: 20px;
+        }
+
+        .header {
+            color: grey;
+            font: 13px/25.5px var(--sans-serif);
+            text-transform: uppercase;
+            margin-bottom: 20px;
+        }
+
+        h1 {
+            font-size: 2em;
+            margin-bottom: 10px;
+            color: #333;
+        }
+
+        .description {
+            margin-bottom: 30px;
+            color: #666;
+            line-height: 1.6;
+        }
+
+        #chart-container {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 600px;
+            position: relative;
         }
 
         #scatter-plot {
@@ -28,7 +60,6 @@
             width: 100%;
             max-width: 1000px;
             margin: 0 auto;
-            padding: 10px;
         }
 
         svg {
@@ -69,7 +100,7 @@
 
         .save-button {
             padding: 8px 16px;
-            background-color: #69b3a2;
+            background-color: #3498db;
             color: white;
             border: none;
             border-radius: 4px;
@@ -79,7 +110,7 @@
         }
 
         .save-button:hover {
-            background-color: #85c7b5;
+            background-color: #2980b9;
         }
 
         .histogram-bar {
@@ -90,16 +121,43 @@
         .histogram-bar:hover {
             fill: #4a7a6e;
         }
+
+        .loading {
+            text-align: center;
+            padding: 50px;
+            color: #999;
+        }
+
+        .error {
+            color: #d32f2f;
+            background-color: #ffebee;
+            padding: 15px;
+            border-radius: 4px;
+            margin: 20px 0;
+        }
     </style>
 </head>
 
 <body>
-    <div id="scatter-plot">
-        <div class="button-container">
-            <button class="save-button" onclick="saveSVG()">Save as SVG</button>
-            <button class="save-button" onclick="savePDF()">Save as PDF</button>
+    <div class="container">
+        <div class="header">
+            <h1>Piece-wise compression (Rhythm)</h1>
+        </div>
+
+        <div class="description">
+            Scatter plot visualization showing the relationship between original size and compressed size.
+        </div>
+
+        <div id="chart-container">
+            <div id="scatter-plot">
+                <div class="button-container">
+                    <button class="save-button" onclick="saveSVG()">Save as SVG</button>
+                    <button class="save-button" onclick="savePDF()">Save as PDF</button>
+                </div>
+            </div>
         </div>
     </div>
+
     <script>
         // Function to save as SVG
         function saveSVG() {
@@ -117,50 +175,197 @@
 
         // Function to save as PDF
         function savePDF() {
-            const svgElement = document.querySelector('svg');
-            const svgData = new XMLSerializer().serializeToString(svgElement);
-            const canvas = document.createElement('canvas');
-            const ctx = canvas.getContext('2d');
-            const img = new Image();
+            try {
+                const svgElement = document.querySelector('svg');
+                if (!svgElement) {
+                    alert('No SVG found to export');
+                    return;
+                }
 
-            // Scale factor for higher resolution (4x)
-            const scaleFactor = 4;
-            
-            // Get actual SVG dimensions from viewBox
-            const viewBox = svgElement.getAttribute('viewBox').split(' ');
-            const svgWidth = parseFloat(viewBox[2]);
-            const svgHeight = parseFloat(viewBox[3]);
+                // Method 1: Try direct jsPDF SVG support first
+                try {
+                    const { jsPDF } = window.jspdf;
 
-            img.onload = function () {
-                // Set canvas dimensions with scale factor for higher resolution
+                    let svgWidth, svgHeight;
+                    const viewBox = svgElement.getAttribute('viewBox');
+
+                    if (viewBox) {
+                        const viewBoxValues = viewBox.split(' ');
+                        svgWidth = parseFloat(viewBoxValues[2]);
+                        svgHeight = parseFloat(viewBoxValues[3]);
+                    } else {
+                        const rect = svgElement.getBoundingClientRect();
+                        svgWidth = rect.width || 800;
+                        svgHeight = rect.height || 600;
+                    }
+
+                    const orientation = svgWidth > svgHeight ? 'landscape' : 'portrait';
+                    const pdf = new jsPDF({
+                        orientation: orientation,
+                        unit: 'pt',
+                        format: [svgWidth, svgHeight]
+                    });
+
+                    const svgString = new XMLSerializer().serializeToString(svgElement);
+
+                    if (pdf.svg) {
+                        pdf.svg(svgString, {
+                            x: 0,
+                            y: 0,
+                            width: svgWidth,
+                            height: svgHeight
+                        }).then(() => {
+                            pdf.save('Piece-wise compression (Rhythm).pdf');
+                        });
+                        return;
+                    }
+                } catch (directSvgError) {
+                    console.log('Direct SVG method failed, trying canvas method:', directSvgError);
+                }
+
+                // Method 2: Enhanced canvas conversion
+                const svgClone = svgElement.cloneNode(true);
+
+                // Remove problematic elements
+                const problematicElements = svgClone.querySelectorAll('foreignObject, switch, metadata');
+                problematicElements.forEach(el => el.remove());
+
+                // Inline essential styles only
+                const allElements = svgClone.querySelectorAll('*');
+                allElements.forEach(element => {
+                    try {
+                        const computedStyle = window.getComputedStyle(element);
+                        let styleStr = '';
+
+                        const importantProps = ['fill', 'stroke', 'stroke-width', 'opacity', 'font-family', 'font-size', 'font-weight'];
+                        importantProps.forEach(prop => {
+                            const value = computedStyle.getPropertyValue(prop);
+                            if (value && value !== 'none' && value !== 'normal') {
+                                styleStr += `${prop}:${value};`;
+                            }
+                        });
+
+                        if (styleStr) {
+                            element.setAttribute('style', styleStr);
+                        }
+                    } catch (styleError) {
+                        // Ignore style errors for individual elements
+                    }
+                });
+
+                let svgWidth, svgHeight;
+                const viewBox = svgElement.getAttribute('viewBox');
+
+                if (viewBox) {
+                    const viewBoxValues = viewBox.split(' ');
+                    svgWidth = parseFloat(viewBoxValues[2]);
+                    svgHeight = parseFloat(viewBoxValues[3]);
+                } else {
+                    const rect = svgElement.getBoundingClientRect();
+                    svgWidth = rect.width || 800;
+                    svgHeight = rect.height || 600;
+                }
+
+                const canvas = document.createElement('canvas');
+                const ctx = canvas.getContext('2d');
+                const img = new Image();
+
+                const scaleFactor = 1.5;
                 canvas.width = svgWidth * scaleFactor;
                 canvas.height = svgHeight * scaleFactor;
 
-                // Clear canvas and scale the context to match the increased canvas size
-                ctx.clearRect(0, 0, canvas.width, canvas.height);
+                ctx.fillStyle = 'white';
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
                 ctx.scale(scaleFactor, scaleFactor);
-                ctx.drawImage(img, 0, 0, svgWidth, svgHeight);
 
-                // Create PDF with proper dimensions that match the SVG's viewBox
-                const imgData = canvas.toDataURL('image/png', 1.0);
-                const { jsPDF } = window.jspdf;
-                
-                // Determine orientation based on aspect ratio
-                const orientation = svgWidth > svgHeight ? 'landscape' : 'portrait';
-                
-                const pdf = new jsPDF({
-                    orientation: orientation,
-                    unit: 'pt', // Use points for more precise sizing
-                    format: [svgWidth, svgHeight],
-                    hotfixes: ['px_scaling']
-                });
+                const timeout = setTimeout(() => {
+                    alert('PDF generation timed out. The visualization is too complex for PDF export. Please use SVG export instead.');
+                }, 20000);
 
-                // Add image at full dimensions
-                pdf.addImage(imgData, 'PNG', 0, 0, svgWidth, svgHeight, '', 'FAST');
-                pdf.save('Piece-wise compression (Rhythm).pdf');
-            };
+                img.onload = function () {
+                    try {
+                        clearTimeout(timeout);
 
-            img.src = 'data:image/svg+xml;base64,' + btoa(unescape(encodeURIComponent(svgData)));
+                        ctx.drawImage(img, 0, 0, svgWidth, svgHeight);
+
+                        let imgData;
+                        try {
+                            imgData = canvas.toDataURL('image/png', 0.9);
+                        } catch (canvasError) {
+                            throw new Error('Canvas to PNG conversion failed: ' + canvasError.message);
+                        }
+
+                        if (!imgData || imgData === 'data:,' || imgData.length < 1000 || !imgData.startsWith('data:image/png')) {
+                            throw new Error('Generated image data is invalid or too small');
+                        }
+
+                        const { jsPDF } = window.jspdf;
+                        const orientation = svgWidth > svgHeight ? 'landscape' : 'portrait';
+                        const pdf = new jsPDF({
+                            orientation: orientation,
+                            unit: 'pt',
+                            format: [svgWidth, svgHeight],
+                            hotfixes: ['px_scaling']
+                        });
+
+                        pdf.addImage(imgData, 'PNG', 0, 0, svgWidth, svgHeight, '', 'FAST');
+                        pdf.save('Piece-wise compression (Rhythm).pdf');
+
+                    } catch (error) {
+                        clearTimeout(timeout);
+                        console.error('Error in canvas method:', error);
+
+                        // Method 3: Fallback to text-only PDF
+                        try {
+                            const { jsPDF } = window.jspdf;
+                            const pdf = new jsPDF();
+                            pdf.setFontSize(16);
+                            pdf.text('Piece-wise compression (Rhythm)', 20, 30);
+                            pdf.setFontSize(12);
+                            pdf.text('The visualization was too complex to export as an image.', 20, 50);
+                            pdf.text('Please use the SVG export option for full fidelity.', 20, 70);
+                            pdf.text('Generated on: ' + new Date().toLocaleString(), 20, 90);
+                            pdf.save('Piece-wise compression (Rhythm) - Text Only.pdf');
+
+                            alert('Complex visualization exported as text-only PDF. For the full visualization, please use SVG export.');
+                        } catch (fallbackError) {
+                            alert('PDF export failed completely. Please use SVG export: ' + error.message);
+                        }
+                    }
+                };
+
+                img.onerror = function (error) {
+                    clearTimeout(timeout);
+                    console.error('Image loading failed:', error);
+                    alert('Failed to convert SVG to image. This visualization may be too complex for PDF export. Please use SVG export instead.');
+                };
+
+                try {
+                    const svgString = new XMLSerializer().serializeToString(svgClone);
+                    const cleanSvgString = svgString
+                        .replace(/(\r\n|\n|\r)/gm, '')
+                        .replace(/\s+/g, ' ')
+                        .trim();
+
+                    const svgBlob = new Blob([cleanSvgString], { type: 'image/svg+xml;charset=utf-8' });
+                    const url = URL.createObjectURL(svgBlob);
+
+                    img.src = url;
+
+                    setTimeout(() => {
+                        URL.revokeObjectURL(url);
+                    }, 25000);
+
+                } catch (encodingError) {
+                    clearTimeout(timeout);
+                    console.error('SVG encoding failed:', encodingError);
+                    alert('Failed to process SVG for PDF export. Please use SVG export instead.');
+                }
+
+            } catch (error) {
+                console.error('Error in PDF export:', error);
+                alert('PDF export failed: ' + error.message + '. Please use SVG export instead.');
+            }
         }
 
         // Set up responsive dimensions
@@ -186,11 +391,11 @@
         // Get dimensions based on screen size
         const dims = getChartDimensions();
         const { width, height, margin } = dims;
-        
+
         // Calculate histogram dimensions for viewBox adjustments
         const histogramHeight = height * 0.15;
         const histogramMargin = 0;
-        
+
         // Create the SVG container with adjusted dimensions to fit histograms
         const svg = d3.select("#scatter-plot")
             .append("svg")
@@ -205,26 +410,25 @@
             .style("opacity", 0);
 
         // Embedded JSON data
-        const data = [{"compressedSize":26,"originalSize":59,"pieceName":"(Invalid)MozartK280:2M01:08"},{"compressedSize":26,"originalSize":57,"pieceName":"(Valid)MozartK279:2M01:06"},{"compressedSize":13,"originalSize":35,"pieceName":"(Valid)MozartK281:2M02:09"},{"compressedSize":21,"originalSize":51,"pieceName":"(Valid)MozartK282:1M01:04"},{"compressedSize":8,"originalSize":73,"pieceName":"(Valid)MozartK282:1M05:08"},{"compressedSize":19,"originalSize":67,"pieceName":"(Valid)MozartK283:2M01:04"},{"compressedSize":20,"originalSize":75,"pieceName":"(Valid)MozartK310:2M01:04"},{"compressedSize":13,"originalSize":47,"pieceName":"(Valid)MozartK330:2M01:04"},{"compressedSize":5,"originalSize":37,"pieceName":"(Valid)MozartK331:1M01:04"},{"compressedSize":26,"originalSize":89,"pieceName":"(Valid)MozartK332:2M01:04"},{"compressedSize":18,"originalSize":61,"pieceName":"(Valid)MozartK457:2M01:03"},{"compressedSize":14,"originalSize":30,"pieceName":"(Valid)MozartK533:2M01:04"},{"compressedSize":26,"originalSize":92,"pieceName":"(Valid)MozartK545:2M01:08"},{"compressedSize":36,"originalSize":73,"pieceName":"(Valid)MozartK570:2M01:04"},{"compressedSize":12,"originalSize":36,"pieceName":"(Valid)SchubertN01M08:11"},{"compressedSize":14,"originalSize":42,"pieceName":"(Valid)SchubertN02M06:09"},{"compressedSize":21,"originalSize":67,"pieceName":"(Valid)SchubertN03M08:15"},{"compressedSize":9,"originalSize":31,"pieceName":"(Valid)SchubertN05M09:12"},{"compressedSize":13,"originalSize":34,"pieceName":"(Valid)SchubertN05M21:24"},{"compressedSize":6,"originalSize":42,"pieceName":"(Valid)SchubertN06M05:08"},{"compressedSize":18,"originalSize":75,"pieceName":"(Valid)SchubertN06M09:14"},{"compressedSize":24,"originalSize":109,"pieceName":"(Valid)SchubertN08M11:20"},{"compressedSize":6,"originalSize":32,"pieceName":"(Valid)SchubertN09M05:08"},{"compressedSize":20,"originalSize":59,"pieceName":"(Valid)SchubertN09M09:14"},{"compressedSize":19,"originalSize":69,"pieceName":"(Valid)SchubertN10M07:15"},{"compressedSize":6,"originalSize":38,"pieceName":"(Valid)SchubertN12M07:10"},{"compressedSize":28,"originalSize":78,"pieceName":"(Valid)SchubertN13M10:25"},{"compressedSize":8,"originalSize":36,"pieceName":"(Valid)SchubertN14M05:08"},{"compressedSize":14,"originalSize":29,"pieceName":"(Valid)SchubertN15M06:09"},{"compressedSize":6,"originalSize":31,"pieceName":"(Valid)SchubertN16M05:08"},{"compressedSize":13,"originalSize":73,"pieceName":"(Valid)SchubertN18M04:08"},{"compressedSize":10,"originalSize":41,"pieceName":"(Valid)SchubertN19M06:12"},{"compressedSize":25,"originalSize":116,"pieceName":"(Valid)SchubertN20M06:19"},{"compressedSize":4,"originalSize":27,"pieceName":"(Valid)SchubertN21M06:07"},{"compressedSize":8,"originalSize":35,"pieceName":"(Valid)SchubertN22M05:09"},{"compressedSize":5,"originalSize":37,"pieceName":"(Valid)SchubertN23M05:08"},{"compressedSize":12,"originalSize":37,"pieceName":"(Valid)SchumannN01M02:05"},{"compressedSize":15,"originalSize":60,"pieceName":"(Valid)SchumannN03M10:15"},{"compressedSize":11,"originalSize":35,"pieceName":"(Valid)SchumannN04M01:04"},{"compressedSize":5,"originalSize":35,"pieceName":"(Valid)SchumannN05M07:14"},{"compressedSize":20,"originalSize":71,"pieceName":"(Valid)SchumannN06M02:07"},{"compressedSize":4,"originalSize":31,"pieceName":"(Valid)SchumannN07M01:04"},{"compressedSize":5,"originalSize":33,"pieceName":"(Valid)SchumannN09M02:05"},{"compressedSize":7,"originalSize":19,"pieceName":"(Valid)SchumannN11M03:04"},{"compressedSize":20,"originalSize":71,"pieceName":"(Valid)SchumannN12M02:09"}];
+        const data = [{"compressedSize":29,"originalSize":57,"pieceName":"(Valid)MozartK279:2M01:06"},{"compressedSize":26,"originalSize":64,"pieceName":"(Valid)MozartK280:2M01:08"},{"compressedSize":14,"originalSize":35,"pieceName":"(Valid)MozartK281:2M02:09"},{"compressedSize":18,"originalSize":51,"pieceName":"(Valid)MozartK282:1M01:04"},{"compressedSize":8,"originalSize":73,"pieceName":"(Valid)MozartK282:1M05:08"},{"compressedSize":24,"originalSize":67,"pieceName":"(Valid)MozartK283:2M01:04"},{"compressedSize":25,"originalSize":83,"pieceName":"(Valid)MozartK284:2M01:08"},{"compressedSize":7,"originalSize":63,"pieceName":"(Valid)MozartK309:2M01:04"},{"compressedSize":16,"originalSize":75,"pieceName":"(Valid)MozartK310:2M01:04"},{"compressedSize":11,"originalSize":44,"pieceName":"(Valid)MozartK311:2M01:04"},{"compressedSize":13,"originalSize":47,"pieceName":"(Valid)MozartK330:2M01:04"},{"compressedSize":11,"originalSize":37,"pieceName":"(Valid)MozartK331:1M01:04"},{"compressedSize":16,"originalSize":89,"pieceName":"(Valid)MozartK332:2M01:04"},{"compressedSize":18,"originalSize":61,"pieceName":"(Valid)MozartK457:2M01:03"},{"compressedSize":14,"originalSize":30,"pieceName":"(Valid)MozartK533:2M01:04"},{"compressedSize":24,"originalSize":92,"pieceName":"(Valid)MozartK545:2M01:08"},{"compressedSize":23,"originalSize":73,"pieceName":"(Valid)MozartK570:2M01:04"},{"compressedSize":11,"originalSize":36,"pieceName":"(Valid)SchubertN01M08:11"},{"compressedSize":14,"originalSize":42,"pieceName":"(Valid)SchubertN02M06:09"},{"compressedSize":19,"originalSize":67,"pieceName":"(Valid)SchubertN03M08:15"},{"compressedSize":9,"originalSize":31,"pieceName":"(Valid)SchubertN05M09:12"},{"compressedSize":10,"originalSize":34,"pieceName":"(Valid)SchubertN05M21:24"},{"compressedSize":6,"originalSize":42,"pieceName":"(Valid)SchubertN06M05:08"},{"compressedSize":18,"originalSize":75,"pieceName":"(Valid)SchubertN06M09:14"},{"compressedSize":21,"originalSize":109,"pieceName":"(Valid)SchubertN08M11:20"},{"compressedSize":5,"originalSize":32,"pieceName":"(Valid)SchubertN09M05:08"},{"compressedSize":13,"originalSize":59,"pieceName":"(Valid)SchubertN09M09:14"},{"compressedSize":15,"originalSize":69,"pieceName":"(Valid)SchubertN10M07:15"},{"compressedSize":9,"originalSize":38,"pieceName":"(Valid)SchubertN12M07:10"},{"compressedSize":40,"originalSize":78,"pieceName":"(Valid)SchubertN13M10:25"},{"compressedSize":8,"originalSize":36,"pieceName":"(Valid)SchubertN14M05:08"},{"compressedSize":14,"originalSize":29,"pieceName":"(Valid)SchubertN15M06:09"},{"compressedSize":6,"originalSize":31,"pieceName":"(Valid)SchubertN16M05:08"},{"compressedSize":16,"originalSize":73,"pieceName":"(Valid)SchubertN18M04:08"},{"compressedSize":11,"originalSize":41,"pieceName":"(Valid)SchubertN19M06:12"},{"compressedSize":26,"originalSize":116,"pieceName":"(Valid)SchubertN20M06:19"},{"compressedSize":4,"originalSize":27,"pieceName":"(Valid)SchubertN21M06:07"},{"compressedSize":7,"originalSize":35,"pieceName":"(Valid)SchubertN22M05:09"},{"compressedSize":5,"originalSize":37,"pieceName":"(Valid)SchubertN23M05:08"},{"compressedSize":8,"originalSize":37,"pieceName":"(Valid)SchumannN01M02:05"},{"compressedSize":17,"originalSize":60,"pieceName":"(Valid)SchumannN03M10:15"},{"compressedSize":11,"originalSize":35,"pieceName":"(Valid)SchumannN04M01:04"},{"compressedSize":13,"originalSize":35,"pieceName":"(Valid)SchumannN05M07:14"},{"compressedSize":27,"originalSize":71,"pieceName":"(Valid)SchumannN06M02:07"},{"compressedSize":4,"originalSize":31,"pieceName":"(Valid)SchumannN07M01:04"},{"compressedSize":14,"originalSize":61,"pieceName":"(Valid)SchumannN08M02:09"},{"compressedSize":5,"originalSize":33,"pieceName":"(Valid)SchumannN09M02:05"},{"compressedSize":10,"originalSize":71,"pieceName":"(Valid)SchumannN10M08:15"},{"compressedSize":3,"originalSize":19,"pieceName":"(Valid)SchumannN11M03:04"},{"compressedSize":20,"originalSize":71,"pieceName":"(Valid)SchumannN12M02:09"}];
 
         // Process the data
         (function () {
             // Calculate histogram dimensions
             const histogramHeight = height * 0.15; // 15% of the main plot height
             const histogramMargin = 0; // Space between main plot and histograms
-            
+
             // Create scales
             const x = d3.scaleLinear()
                 .domain([0, d3.max(data, d => d.originalSize)])
                 .range([0, width]);
-             
-            
+
 
             const y = d3.scaleLinear()
                 .domain([0, d3.max(data, d => d.compressedSize)])
                 .range([height, 0]);
-              
-                
+
+
             // Generate tick values to ensure consistency between plots and histograms
             const xTicks = x.ticks(15);
             const yTicks = y.ticks(15);
@@ -284,16 +488,16 @@
                 .thresholds(xTicks); // Use the same tick values as the main x-axis
 
             const xBins = xHistogram(data);
-            
+
             // Determine y-scale for X histogram
             const xHistY = d3.scaleLinear()
                 .domain([0, d3.max(xBins, d => d.length)])
                 .range([0, histogramHeight]); // For downward bars
-                
+
             // Create X histogram container
             const xHistGroup = svg.append("g")
-                .attr("transform", `translate(0, ${height + histogramMargin/2})`);
-            
+                .attr("transform", `translate(0, ${height + histogramMargin / 2})`);
+
             // Draw X histogram bars - now facing downward
             const xHistBars = xHistGroup.selectAll("rect")
                 .data(xBins)
@@ -303,7 +507,7 @@
                 .attr("width", d => Math.max(0, x(d.x1) - x(d.x0) - 1))
                 .attr("y", 0) // Start at 0 to go downward
                 .attr("height", d => xHistY(d.length));
-            
+
             // Add frequency numbers to bars (for bars with enough width and non-zero frequency)
             xHistGroup.selectAll("text")
                 .data(xBins)
@@ -315,7 +519,7 @@
                 .attr("fill", "#333")
                 .style("font-size", histogramLabelSize)
                 .text(d => d.length);
-                
+
             // Create Y-axis histogram
             const yHistogram = d3.histogram()
                 .value(d => d.compressedSize)
@@ -323,16 +527,16 @@
                 .thresholds(yTicks); // Use the same tick values as the main y-axis
 
             const yBins = yHistogram(data);
-            
+
             // Determine x-scale for Y histogram
             const yHistX = d3.scaleLinear()
                 .domain([0, d3.max(yBins, d => d.length)])
                 .range([0, histogramHeight]); // Scale for leftward bars
-                
+
             // Create Y histogram container - position at the left of the y-axis
             const yHistGroup = svg.append("g")
-                .attr("transform", `translate(${-histogramMargin/2}, 0)`);
-                
+                .attr("transform", `translate(${-histogramMargin / 2}, 0)`);
+
             // Draw Y histogram bars (horizontal) - facing left and aligning with y-axis
             const yHistBars = yHistGroup.selectAll("rect")
                 .data(yBins)
@@ -342,7 +546,7 @@
                 .attr("width", d => yHistX(d.length))
                 .attr("y", d => y(d.x1)) // Align with the y-axis values
                 .attr("height", d => Math.max(0, y(d.x0) - y(d.x1) - 1));
-                
+
             // Add frequency numbers to bars (for bars with enough height and non-zero frequency)
             yHistGroup.selectAll(".hist-label")
                 .data(yBins)
@@ -357,16 +561,16 @@
                 .text(d => d.length);
 
             // Add dots
-            const tooltipContent = d => 
-                                    `${d.pieceName}<br>
+            const tooltipContent = d =>
+                `${d.pieceName}<br>
                                     original size: ${d.originalSize} <br>
                                     compressed size: ${d.compressedSize}`;
-              
+
             svg.selectAll("circle")
                 .data(data)
                 .join("circle")
-                .attr("cx", d => x(d.originalSize + Math.random() * 0.1 ))
-                .attr("cy", d => y(d.compressedSize + Math.random() * 0.1 ))
+                .attr("cx", d => x(d.originalSize + Math.random() * 0.1))
+                .attr("cy", d => y(d.compressedSize + Math.random() * 0.1))
                 .attr("r", width < 500 ? 4 : 6)
                 .style("fill", "grey")
                 .style("opacity", 0.7)
@@ -379,13 +583,13 @@
                         .duration(200)
                         .style("opacity", .9);
 
-                    
-                    
+
+
                     // Calculate tooltip position relative to the visualization container
                     const containerRect = document.getElementById('scatter-plot').getBoundingClientRect();
-                    const tooltipX = event.pageX  + 10;
+                    const tooltipX = event.pageX + 10;
                     const tooltipY = event.pageY - 28;
-                    
+
                     tooltip.html(tooltipContent(d))
                         .style("left", tooltipX + "px")
                         .style("top", tooltipY + "px");
@@ -409,14 +613,13 @@
                         .duration(200)
                         .style("opacity", .9);
 
-                    
-                   
+
 
                     // Calculate tooltip position relative to the visualization container for touch events
                     const containerRect = document.getElementById('scatter-plot').getBoundingClientRect();
                     const tooltipX = event.touches[0].pageX - containerRect.left + 10;
                     const tooltipY = event.touches[0].pageY - containerRect.top - 28;
-                    
+
                     tooltip.html(tooltipContent(d))
                         .style("left", tooltipX + "px")
                         .style("top", tooltipY + "px");
