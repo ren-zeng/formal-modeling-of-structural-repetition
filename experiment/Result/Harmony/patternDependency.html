@@ -111,7 +111,19 @@
             COLOR_NONE: "#ccc",
             
             // Chart dimensions
-            WIDTH: 954
+            WIDTH: 954,
+            
+            // Tree node colors by tag
+            TREE_NODE_COLORS: {
+                "Prep": "rgba(179, 0, 255, 0.8)",      // Red for Prep nodes
+                "Prol": "rgba(255, 165, 0, 0.8)",      // Blue for Prol nodes  
+                "Term": "rgba(0, 0, 255, 0.8)",      // Blue for Term nodes
+                "Constant": "rgba(0, 0, 255, 0.8)",  // Blue for Constant nodes
+                "Hole": "transparent",               // Transparent for Hole nodes
+                "Prepare": "rgba(179, 0, 255, 0.8)",
+                "Split": "rgba(255, 165, 0, 0.8)", // Orange for Split nodes
+                "default": "rgba(0, 0, 255, 0.8)"  // Default blue for unknown tags
+            }
         };
 
         // Global state
@@ -412,14 +424,8 @@
                         .attr("y", -nodeHeight / 2)
                         .attr("rx", 4)
                         .style("fill", d => {
-                            if (!d.data.tag) return "rgba(204, 204, 204, 0.8)";
-                            switch(d.data.tag) {
-                                case "Prep": return "rgba(255, 107, 107, 0.8)";
-                                case "Prol": return "rgba(78, 205, 196, 0.8)"; 
-                                case "Term": return "rgba(69, 183, 209, 0.8)";
-                                case "Constant": return "rgba(100, 200, 100, 0.8)";
-                                default: return "rgba(254, 202, 87, 0.8)";
-                            }
+                            const nodeTag = d.data.tag || d.data.nodeType;
+                            return CONFIG.TREE_NODE_COLORS[nodeTag] || CONFIG.TREE_NODE_COLORS.default;
                         })
                         .style("stroke", "#fff")
                         .style("stroke-width", 1.5);
