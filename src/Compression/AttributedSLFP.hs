@@ -53,11 +53,11 @@ deCompressTreeAttributed b f dP dM dA t@(Node r ts) = case snd r of
 pSubstituteAllAttributed :: _ =>
     b -> 
     Int ->
-    (String, Pattern a) ->
-    (b -> String -> Int -> a -> b) ->
-    Tree (b, a) ->
+    (String, Pattern (Abstraction a)) ->
+    (b -> String -> Int -> Abstraction a -> b) ->
+    Tree (b, Abstraction a) ->
     [Location] ->
-    Tree (b, a)
+    Tree (b, Abstraction a)
 pSubstituteAllAttributed defB n e f =
     applyPostOrder (pSubstitutionTopAttributed defB n e f)
 
@@ -72,16 +72,18 @@ rSubstituteAllAttributed b e = applyPostOrder (rSubstitutionTopAttributed b e)
 pSubstitutionTopAttributed ::_ =>
     b -> 
     Int ->
-    (String, Pattern a) ->
-    (b -> String -> Int -> a -> b) ->
-    Tree (b, a) ->
-    Tree (b, a)
+    (String, Pattern (Abstraction a)) ->
+    (b -> String -> Int -> Abstraction a -> b) ->
+    Tree (b, Abstraction a) ->
+    Tree (b, Abstraction a)
 pSubstitutionTopAttributed defB n (patID, Comp i r y) f (Node (b, _) ts) =
     Node (updatedAttr, r) $
         take (i - 1) ts
-            ++ [Node (defB, y) (take n . drop (i - 1) $ ts)]
+            ++ [Node (initAttr y, y) (take n . drop (i - 1) $ ts)]
             ++ drop (i + n - 1) ts
   where
+    initAttr (Var patID2) = f defB patID2 i r
+    initAttr _ = defB
     updatedAttr = f b patID i r -- only the top g's atttribute in @g oi f@ updated (for the task of locating the pattern)
     
 

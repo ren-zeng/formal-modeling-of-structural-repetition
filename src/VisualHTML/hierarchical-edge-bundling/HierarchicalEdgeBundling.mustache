@@ -20,6 +20,8 @@
             border-radius: 8px;
             box-shadow: 0 2px 10px rgba(0,0,0,0.1);
             padding: 20px;
+            display: flex;
+            flex-direction: column;
         }
         
         .header {
@@ -41,11 +43,98 @@
             line-height: 1.6;
         }
         
+        .visualization-container {
+            display: flex;
+            gap: 20px;
+            min-height: 600px;
+            flex-direction: row; /* Side by side on wide screens */
+        }
+        
         #chart-container {
+            flex: 1;
+            width: 50%; /* Exactly half the screen */
+            display: flex;
+            justify-content: flex-start;
+            align-items: flex-start;
+            min-height: 600px;
+            min-width: 0; /* Allow shrinking */
+            padding: 10px;
+        }
+        
+        #info-panel {
+            flex: 1;
+            width: 50%; /* Exactly half the screen */
+            background-color: #fafafa;
+            border: none;
+            border-radius: 8px;
+            padding: 20px;
+            overflow-y: auto;
+            max-height: 600px;
+            flex-shrink: 0; /* Don't shrink the info panel */
+            box-shadow: 0 1px 3px rgba(0,0,0,0.04);
+        }
+        
+        .info-panel-header {
+            font-size: 12px;
+            font-weight: 500;
+            color: #6b7280;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            margin-bottom: 16px;
+        }
+        
+        .node-details {
+            background: none;
+            padding: 0;
+            border-radius: 0;
+            margin-bottom: 20px;
+            box-shadow: none;
+            border-bottom: 1px solid #e5e7eb;
+            padding-bottom: 16px;
+        }
+        
+        .node-details h3 {
+            margin: 0 0 12px 0;
+            color: #111827;
+            font-size: 18px;
+            font-weight: 600;
+            letter-spacing: -0.025em;
+        }
+        
+        .detail-item {
+            margin: 5px 0;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 4px 0;
+        }
+        
+        .detail-label {
+            font-weight: 500;
+            color: #6b7280;
+            font-size: 13px;
+        }
+        
+        .detail-value {
+            color: #666;
+        }
+        
+        #tree-display {
+            background: rgba(0, 0, 0, 0.9);
+            border-radius: 5px;
+            padding: 10px;
+            margin-top: 15px;
+            min-height: 200px;
             display: flex;
             justify-content: center;
             align-items: center;
-            min-height: 600px;
+        }
+        
+        .no-selection {
+            text-align: center;
+            color: #999;
+            font-style: italic;
+            padding: 40px 20px;
         }
         
         .tree-tooltip {
@@ -66,6 +155,12 @@
             border-radius: 4px;
             margin: 20px 0;
         }
+
+        #chart-container svg {
+            width: 100% !important;
+            height: auto !important;
+            max-width: none !important;
+        }
     </style>
 </head>
 <body>
@@ -78,8 +173,16 @@
             {{description}}
         </div>
         
-        <div id="chart-container">
-            <div class="loading">Loading visualization...</div>
+        <div class="visualization-container">
+            <div id="chart-container">
+                <div class="loading">Loading visualization...</div>
+            </div>
+            <div id="info-panel">
+                <div class="info-panel-header">Node Information</div>
+                <div class="info-panel-content">
+                    <div class="no-selection">Select a node to see details</div>
+                </div>
+            </div>
         </div>
     </div>
 
@@ -100,7 +203,7 @@
             
             // Level colors
             LEVEL_COLORS: [
-                "#e41a1c", "#377eb8", "#4daf4a", "#984ea3", "#ff7f00", "#999999",
+                "#377eb8","#e41a1c",  "#4daf4a", "#984ea3", "#ff7f00", "#999999",
                 "#a65628", "#f781bf", "#999999", "#1f78b4", "#33a02c", "#fb9a99",
                 "#fdbf6f", "#cab2d6", "#6a3d9a", "#b15928", "#a6cee3", "#b2df8a"
             ],
@@ -111,7 +214,14 @@
             COLOR_NONE: "#ccc",
             
             // Chart dimensions
-            WIDTH: 954,
+            WIDTH: 800,
+            
+            // Frequency bar configuration
+            BAR_COLOR: "rgba(0, 150, 0, 0.7)",
+            BAR_COLOR_HOVER: "rgba(0, 200, 0, 0.9)",
+            BAR_WIDTH: 10, // Set to match typical font height (10px)
+            BAR_MAX_HEIGHT: 60,
+            BAR_MIN_HEIGHT: 5,
             
             // Tree node colors by tag
             TREE_NODE_COLORS: {
@@ -349,25 +459,51 @@
                 const maxDepth = hierarchy.height;
                 const leaves = hierarchy.leaves().length;
                 
-                const minWidth = 300;
-                const minHeight = 200;
-                const nodeWidth = 100;
-                const nodeHeight = 60;
+                // Get the actual available space in the info panel
+                const infoPanel = document.getElementById('info-panel');
+                const availableWidth = infoPanel ? infoPanel.clientWidth - 60 : 340; // More padding for margins
+                const maxHeight = 250; // Reduced max height to leave room for scaling
                 
-                const calculatedWidth = Math.max(minWidth, leaves * nodeWidth);
-                const calculatedHeight = Math.max(minHeight, (maxDepth + 1) * nodeHeight + 120);
+                const minWidth = 180;
+                const minHeight = 120;
+                
+                // Scale down node spacing significantly to prevent overlaps
+                const baseNodeWidth = Math.max(40, Math.min(60, availableWidth / Math.max(leaves, 3)));
+                const baseNodeHeight = Math.max(35, Math.min(45, maxHeight / Math.max(maxDepth + 1, 2)));
+                
+                // Calculate dimensions with better scaling
+                const calculatedWidth = Math.max(minWidth, Math.min(leaves * baseNodeWidth, availableWidth));
+                const calculatedHeight = Math.max(minHeight, Math.min((maxDepth + 1) * baseNodeHeight + 60, maxHeight));
                 
                 return {
                     width: calculatedWidth,
                     height: calculatedHeight,
-                    maxDepth
+                    maxDepth,
+                    nodeWidth: baseNodeWidth,
+                    nodeHeight: baseNodeHeight
                 };
             }
             
             const dimensions = calculateTreeDimensions(treeData);
             const treeWidth = dimensions.width;
             const treeHeight = dimensions.height;
-            const fontSize = 11;
+            const hierarchy = d3.hierarchy(treeData);
+            const totalNodes = hierarchy.descendants().length;
+            const leaves = hierarchy.leaves().length;
+            
+            // More aggressive font scaling for large trees
+            let fontSize = Math.max(8, Math.min(11, treeWidth / 40)); // Base font size
+            
+            // Additional scaling based on number of nodes and leaves
+            if (totalNodes > 15) {
+                fontSize = Math.max(6, fontSize * 0.8); // Reduce font size for trees with many nodes
+            }
+            if (leaves > 8) {
+                fontSize = Math.max(5, fontSize * 0.7); // Further reduce for trees with many leaves
+            }
+            if (totalNodes > 25) {
+                fontSize = Math.max(4, fontSize * 0.6); // Very small font for very large trees
+            }
             
             const treeSvg = d3.create("svg")
                 .attr("width", treeWidth)
@@ -376,19 +512,26 @@
                 .style("border-radius", "5px");
             
             const treeLayout = d3.tree()
-                .size([treeWidth - 40, treeHeight - 60])
+                .size([treeWidth - 30, treeHeight - 40]) // Reduced margins
                 .separation((a, b) => {
-                    const aWidth = a.data.name.length * 7 + 16;
-                    const bWidth = b.data.name.length * 7 + 16;
-                    const minSeparation = (aWidth + bWidth) / 2 + 10;
-                    return Math.max(1, minSeparation / 80);
+                    // Much more aggressive separation to prevent overlaps
+                    const aTextWidth = a.data.name.length * (fontSize * 0.6);
+                    const bTextWidth = b.data.name.length * (fontSize * 0.6);
+                    const minNodeWidth = Math.max(aTextWidth + 20, 35);
+                    const maxNodeWidth = Math.max(bTextWidth + 20, 35);
+                    
+                    // Calculate required separation based on actual node sizes
+                    const requiredSeparation = (minNodeWidth + maxNodeWidth) / 2 + 15;
+                    const layoutScale = (treeWidth - 30) / 100; // Scale factor based on available width
+                    
+                    return Math.max(1.2, requiredSeparation / Math.max(layoutScale, 20));
                 });
             
             const hierarchyTree = d3.hierarchy(treeData);
             const treeNodes = treeLayout(hierarchyTree);
             
             const g = treeSvg.append("g")
-                .attr("transform", "translate(20, 30)");
+                .attr("transform", "translate(15, 20)"); // Reduced translate values
             
             // Add links
             g.selectAll(".tree-link")
@@ -409,12 +552,13 @@
                 .attr("class", "tree-node")
                 .attr("transform", d => `translate(${d.x},${d.y})`);
             
-            // Add background shapes
+            // Add background shapes with better sizing
             node.each(function(d) {
                 const nodeElement = d3.select(this);
                 const textLength = d.data.name.length;
-                const nodeWidth = Math.max(textLength * 7 + 16, 30);
-                const nodeHeight = fontSize + 8;
+                // Scale node size proportionally with font size - more aggressive scaling
+                const nodeWidth = Math.max(textLength * fontSize * 0.6 + 8, fontSize * 2);
+                const nodeHeight = Math.max(fontSize * 1.2 + 4, fontSize + 2);
                 
                 if (d.data.nodeType !== "Hole") {
                     nodeElement.append("rect")
@@ -422,17 +566,17 @@
                         .attr("height", nodeHeight)
                         .attr("x", -nodeWidth / 2)
                         .attr("y", -nodeHeight / 2)
-                        .attr("rx", 4)
+                        .attr("rx", Math.max(2, fontSize * 0.2)) // Scale border radius with font size
                         .style("fill", d => {
                             const nodeTag = d.data.tag || d.data.nodeType;
                             return CONFIG.TREE_NODE_COLORS[nodeTag] || CONFIG.TREE_NODE_COLORS.default;
                         })
                         .style("stroke", "#fff")
-                        .style("stroke-width", 1.5);
+                        .style("stroke-width", Math.max(0.5, fontSize * 0.1)); // Scale stroke width with font size
                 }
             });
             
-            // Add text labels
+            // Add text labels with scaled font
             node.append("text")
                 .attr("text-anchor", "middle")
                 .attr("dy", "0.35em")
@@ -441,7 +585,7 @@
                 .style("fill", "white")
                 .style("font-weight", "bold")
                 .style("text-shadow", "1px 1px 1px rgba(0,0,0,0.8)")
-                .text(d => d.data.name);
+                .text(d => d.data.name); // Show full text without truncation
             
             return treeSvg.node();
         }
@@ -463,16 +607,6 @@
                 .style("max-width", "100%")
                 .style("height", "auto")
                 .style("font", "10px sans-serif");
-
-            // Create tooltip
-            const tooltip = d3.select("body").append("div")
-                .attr("class", "tree-tooltip")
-                .style("position", "absolute")
-                .style("visibility", "hidden")
-                .style("padding", "0")
-                .style("border-radius", "5px")
-                .style("z-index", "1000")
-                .style("pointer-events", "none");
 
             // Create gradients
             const defs = svg.append("defs");
@@ -525,16 +659,13 @@
                 })
                 .style("cursor", "pointer")
                 .on("click", function(event, d) {
-                    handleNodeClick(event, d, this, tooltip, svg, actualNodes);
+                    handleNodeClick(event, d, this);
                 })
                 .on("mouseover", function(event, d) {
                     handleNodeMouseOver(event, d, this);
                 })
                 .on("mouseout", function(event, d) {
-                    handleNodeMouseOut(event, d, this, tooltip);
-                })
-                .on("mousemove", function(event, d) {
-                    handleNodeMouseMove(event, d, tooltip);
+                    handleNodeMouseOut(event, d, this);
                 })
                 .call(text => text.append("title").text(d => `${d.data.patternID}
 Level: ${d.data.level}
@@ -566,13 +697,73 @@ Click to toggle persistent tree view`));
                     d.gradientId = `gradient-${i}`;
                 });
 
+            // Add frequency bars based on logarithm of frequency
+            // Filter out nodes with zero frequency for log calculation
+            const nodesWithFreq = actualNodes.filter(d => (d.data.globalFreq || 0) > 0);
+            
+            if (nodesWithFreq.length > 0) {
+                // Calculate log scale for frequency (using log base 10)
+                const minFreq = Math.min(...nodesWithFreq.map(d => d.data.globalFreq));
+                const maxFreq = Math.max(...nodesWithFreq.map(d => d.data.globalFreq));
+                
+                // Use log10 for better visual distribution
+                const logMinFreq = Math.log10(minFreq);
+                const logMaxFreq = Math.log10(maxFreq);
+                
+                // Scale bar height based on log of frequency
+                const barHeightScale = d3.scaleLinear()
+                    .domain([logMinFreq, logMaxFreq])
+                    .range([CONFIG.BAR_MIN_HEIGHT, CONFIG.BAR_MAX_HEIGHT])
+                    .clamp(true);
+
+                // Calculate the text envelope circle radius
+                // Get the maximum text width to determine the outer circle boundary
+                let maxTextRadius = 0;
+                actualNodes.forEach(d => {
+                    // Estimate text width based on character count and font size
+                    const estimatedTextWidth = d.data.patternID.length * 6; // Approximate 6px per character
+                    const textRadius = d.y + estimatedTextWidth + 10; // Add padding
+                    maxTextRadius = Math.max(maxTextRadius, textRadius);
+                });
+
+                // Add a visual circle to show the text envelope boundary (optional for debugging)
+                // svg.append("circle")
+                //     .attr("cx", 0)
+                //     .attr("cy", 0)
+                //     .attr("r", maxTextRadius)
+                //     .attr("fill", "none")
+                //     .attr("stroke", "#ddd")
+                //     .attr("stroke-width", 1)
+                //     .attr("stroke-dasharray", "5,5");
+
+                const barGroup = svg.append("g")
+                    .selectAll("g")
+                    .data(actualNodes)
+                    .join("g")
+                    .attr("transform", d => `rotate(${d.x * 180 / Math.PI - 90}) translate(${maxTextRadius},0)`);
+                
+                // Bars start from the text envelope circle and grow outward orthogonally
+                barGroup.append("line")
+                    .attr("x1", 0)  // Start at the text envelope circle
+                    .attr("y1", 0)
+                    .attr("x2", d => {
+                        const freq = d.data.globalFreq || 1;
+                        return freq > 0 ? barHeightScale(Math.log10(freq)) : CONFIG.BAR_MIN_HEIGHT;
+                    })  // Use logarithm of frequency
+                    .attr("y2", 0)  // Keep y constant for orthogonal direction
+                    .attr("stroke", d => levelColorScale(d.data.level))  // Color bars by level
+                    .attr("stroke-width", CONFIG.BAR_WIDTH)
+                    .attr("stroke-opacity", 0.8)
+                    .style("mix-blend-mode", "multiply");
+            }
+
             // Store references for event handlers
-            window.currentChart = { link, actualNodes };
+            window.currentChart = { link, actualNodes, allEdges };
 
             // Add background click handler
             svg.on("click", function(event) {
                 if (event.target === this && isToggledMode) {
-                    clearToggleState(tooltip);
+                    clearToggleState();
                 }
             });
 
@@ -580,9 +771,9 @@ Click to toggle persistent tree view`));
         }
 
         // Event handlers
-        function handleNodeClick(event, d, element, tooltip, svg, actualNodes) {
+        function handleNodeClick(event, d, element) {
             if (toggledNode === d) {
-                clearToggleState(tooltip);
+                clearToggleState();
             } else {
                 if (toggledNode) {
                     d3.select(toggledNode.text)
@@ -597,142 +788,261 @@ Click to toggle persistent tree view`));
                     .attr("font-weight", "bold")
                     .style("text-decoration", "underline");
                 
-                if (d.data.ruleTree) {
-                    const treeSvg = createTreeTooltipSVG(d.data.ruleTree);
-                    if (treeSvg) {
-                        tooltip
-                            .style("visibility", "visible")
-                            .html("")
-                            .node().appendChild(treeSvg);
-                        
-                        positionTooltip(d, tooltip, svg);
-                    }
-                }
-                
+                updateInfoPanel(d);
                 highlightNodeEdges(d);
             }
             event.stopPropagation();
         }
 
         function handleNodeMouseOver(event, d, element) {
-            if (isToggledMode) return;
-            
+            // Always allow hover highlighting, even in toggle mode
             highlightNodeEdges(d);
             d3.select(element).attr("font-weight", "bold");
+            updateInfoPanel(d);
         }
 
-        function handleNodeMouseOut(event, d, element, tooltip) {
-            if (isToggledMode) return;
-            
-            tooltip.style("visibility", "hidden");
+        function handleNodeMouseOut(event, d, element) {
+            // Always reset the current node's font weight first
             d3.select(element).attr("font-weight", null);
-            resetAllEdges();
+            
+            if (isToggledMode && toggledNode) {
+                // If we're in toggle mode, just restore the toggled node state
+                updateInfoPanel(toggledNode);
+                d3.select(toggledNode.text)
+                    .attr("font-weight", "bold")
+                    .style("text-decoration", "underline");
+            } else {
+                // No toggle mode - completely reset everything
+                resetAllEdges();
+                clearInfoPanel();
+            }
         }
 
-        function handleNodeMouseMove(event, d, tooltip) {
-            if (!isToggledMode) {
-                if (d.data.ruleTree) {
-                    const treeSvg = createTreeTooltipSVG(d.data.ruleTree);
-                    if (treeSvg) {
-                        tooltip
-                            .style("visibility", "visible")
-                            .html("")
-                            .node().appendChild(treeSvg);
-                        
-                        tooltip
-                            .style("left", (event.pageX + 10) + "px")
-                            .style("top", (event.pageY - 10) + "px");
-                    }
+        function updateInfoPanel(d) {
+            const infoContent = document.querySelector('.info-panel-content');
+            
+            // Create node details
+            const nodeDetailsHtml = `
+                <div class="node-details">
+                    <h3>Pattern ${d.data.patternID}</h3>
+                    <div class="detail-item">
+                        <span class="detail-label">Level:</span>
+                        <span class="detail-value">${d.data.level}</span>
+                    </div>
+                    <div class="detail-item">
+                        <span class="detail-label">Dependencies:</span>
+                        <span class="detail-value">${d.data.dependenciesDirect ? d.data.dependenciesDirect.length : 0}</span>
+                    </div>
+                    <div class="detail-item">
+                        <span class="detail-label">Dependents:</span>
+                        <span class="detail-value">${d.data.dependentsDirect ? d.data.dependentsDirect.length : 0}</span>
+                    </div>
+                    <div class="detail-item">
+                        <span class="detail-label">Global Frequency:</span>
+                        <span class="detail-value">${d.data.globalFreq || 0}</span>
+                    </div>
+                </div>
+            `;
+            
+            // Add tree display
+            let treeHtml = '<div id="tree-display">';
+            if (d.data.ruleTree) {
+                const treeSvg = createTreeTooltipSVG(d.data.ruleTree);
+                if (treeSvg) {
+                    treeHtml += treeSvg.outerHTML;
+                } else {
+                    treeHtml += '<div class="no-selection">No tree visualization available</div>';
                 }
+            } else {
+                treeHtml += '<div class="no-selection">No rule tree available</div>';
             }
+            treeHtml += '</div>';
+            
+            infoContent.innerHTML = nodeDetailsHtml + treeHtml;
         }
 
-        function positionTooltip(d, tooltip, svg) {
-            const nodeAngle = d.x;
-            const nodeRadius = d.y;
-            
-            const nodeX = nodeRadius * Math.cos(nodeAngle - Math.PI/2);
-            const nodeY = nodeRadius * Math.sin(nodeAngle - Math.PI/2);
-            
-            const svgElement = svg.node();
-            const svgRect = svgElement.getBoundingClientRect();
-            const svgCenterX = svgRect.left + svgRect.width / 2;
-            const svgCenterY = svgRect.top + svgRect.height / 2;
-            
-            const pageX = svgCenterX + nodeX;
-            const pageY = svgCenterY + nodeY;
-            
-            const offsetDistance = 50;
-            const offsetAngle = nodeAngle - Math.PI/2;
-            const offsetX = Math.cos(offsetAngle) * offsetDistance;
-            const offsetY = Math.sin(offsetAngle) * offsetDistance;
-            
-            let finalX = pageX + offsetX;
-            let finalY = pageY + offsetY;
-            
-            // Keep tooltip on screen
-            const screenWidth = window.innerWidth;
-            const screenHeight = window.innerHeight;
-            const tooltipWidth = 400;
-            const tooltipHeight = 250;
-            
-            if (finalX + tooltipWidth > screenWidth) {
-                finalX = pageX - offsetX - tooltipWidth;
-            }
-            if (finalY + tooltipHeight > screenHeight) {
-                finalY = Math.max(10, finalY - tooltipHeight);
-            }
-            if (finalX < 0) finalX = 10;
-            if (finalY < 0) finalY = 10;
-            
-            tooltip
-                .style("left", finalX + "px")
-                .style("top", finalY + "px");
+        function clearInfoPanel() {
+            const infoContent = document.querySelector('.info-panel-content');
+            infoContent.innerHTML = '<div class="no-selection">Select a node to see details</div>';
         }
 
         function highlightNodeEdges(d) {
             if (!window.currentChart) return;
             
-            const { link } = window.currentChart;
+            const { link, actualNodes, allEdges } = window.currentChart;
             
+            // Only reset if we're not in toggle mode or if this is a different node than toggled
+            if (!isToggledMode || toggledNode !== d) {
+                resetAllEdges();
+            }
+            
+            // Set mix-blend-mode to null to make highlighted edges more visible
             link.style("mix-blend-mode", null);
             
-            d3.selectAll(d.incoming.map(d => d.path))
-                .attr("stroke-opacity", CONFIG.EDGE_OPACITY_HOVER)
-                .attr("stroke-width", CONFIG.EDGE_WIDTH_HOVER)
-                .raise();
-            d3.selectAll(d.incoming.map(([d]) => d.text))
-                .attr("fill", CONFIG.COLOR_OUT)
-                .attr("font-weight", "bold");
+            // Get all related nodes (incoming sources and outgoing targets)
+            const relatedNodes = new Set();
+            relatedNodes.add(d); // Add the hovered node itself
             
-            d3.selectAll(d.outgoing.map(d => d.path))
+            // Add incoming source nodes
+            d.incoming.forEach(([source, target]) => {
+                relatedNodes.add(source);
+            });
+            
+            // Add outgoing target nodes
+            d.outgoing.forEach(([source, target]) => {
+                relatedNodes.add(target);
+            });
+            
+            // Get related edges with their indices
+            const relatedEdgePaths = new Set();
+            const relatedEdgeIndices = new Map(); // Map path element to its index
+            
+            d.incoming.forEach(edge => {
+                relatedEdgePaths.add(edge.path);
+                // Find the index of this edge in allEdges
+                const edgeIndex = allEdges.findIndex(e => e === edge);
+                if (edgeIndex !== -1) {
+                    relatedEdgeIndices.set(edge.path, edgeIndex);
+                }
+            });
+            
+            d.outgoing.forEach(edge => {
+                relatedEdgePaths.add(edge.path);
+                // Find the index of this edge in allEdges
+                const edgeIndex = allEdges.findIndex(e => e === edge);
+                if (edgeIndex !== -1) {
+                    relatedEdgeIndices.set(edge.path, edgeIndex);
+                }
+            });
+            
+            // Grey out all nodes first
+            actualNodes.forEach(node => {
+                if (!relatedNodes.has(node)) {
+                    d3.select(node.text)
+                        .attr("fill", CONFIG.COLOR_NONE)
+                        .attr("opacity", 0.3);
+                }
+            });
+            
+            // Grey out all edges first (both opacity and color)
+            link
+                .attr("stroke", CONFIG.COLOR_NONE)
+                .attr("stroke-opacity", 0.3)
+                .attr("stroke-width", CONFIG.EDGE_WIDTH);
+            
+            // Highlight incoming edges and their source nodes
+            const incomingPaths = d.incoming.map(edge => edge.path);
+            const incomingTexts = d.incoming.map(([source]) => source.text);
+            
+            d3.selectAll(incomingPaths)
+                .attr("stroke", function() {
+                    const edgeIndex = relatedEdgeIndices.get(this);
+                    return edgeIndex !== undefined ? `url(#gradient-${edgeIndex})` : CONFIG.COLOR_NONE;
+                })
                 .attr("stroke-opacity", CONFIG.EDGE_OPACITY_HOVER)
                 .attr("stroke-width", CONFIG.EDGE_WIDTH_HOVER)
                 .raise();
-            d3.selectAll(d.outgoing.map(([, d]) => d.text))
+                
+            d3.selectAll(incomingTexts)
+                .attr("fill", CONFIG.COLOR_OUT)
+                .attr("font-weight", "bold")
+                .attr("opacity", 1);
+            
+            // Highlight outgoing edges and their target nodes
+            const outgoingPaths = d.outgoing.map(edge => edge.path);
+            const outgoingTexts = d.outgoing.map(([, target]) => target.text);
+            
+            d3.selectAll(outgoingPaths)
+                .attr("stroke", function() {
+                    const edgeIndex = relatedEdgeIndices.get(this);
+                    return edgeIndex !== undefined ? `url(#gradient-${edgeIndex})` : CONFIG.COLOR_NONE;
+                })
+                .attr("stroke-opacity", CONFIG.EDGE_OPACITY_HOVER)
+                .attr("stroke-width", CONFIG.EDGE_WIDTH_HOVER)
+                .raise();
+                
+            d3.selectAll(outgoingTexts)
                 .attr("fill", CONFIG.COLOR_IN)
-                .attr("font-weight", "bold");
+                .attr("font-weight", "bold")
+                .attr("opacity", 1);
+            
+            // Make sure the hovered node itself is fully visible
+            d3.select(d.text)
+                .attr("fill", d.originalColor)
+                .attr("font-weight", "bold")
+                .attr("opacity", 1);
+                
+            // Store highlighted elements for later cleanup
+            window.highlightedElements = {
+                incomingPaths,
+                incomingTexts,
+                outgoingPaths,
+                outgoingTexts,
+                relatedNodes,
+                relatedEdgeIndices
+            };
         }
 
         function resetAllEdges() {
             if (!window.currentChart) return;
             
-            const { link, actualNodes } = window.currentChart;
+            const { link, actualNodes, allEdges } = window.currentChart;
             
+            // Reset mix-blend-mode back to normal
             link.style("mix-blend-mode", "normal");
             
+            // Reset ALL links to their default state with original gradients
             link
+                .attr("stroke", (d, i) => `url(#gradient-${i})`)  // Restore original gradients
                 .attr("stroke-opacity", CONFIG.EDGE_OPACITY)
-                .attr("stroke-width", CONFIG.EDGE_WIDTH);
+                .attr("stroke-width", CONFIG.EDGE_WIDTH)
+                .lower(); // Ensure all links are at the back
             
+            // Reset all node colors, font weights, and opacity to original state
             actualNodes.forEach(node => {
                 d3.select(node.text)
                     .attr("fill", node.originalColor)
-                    .attr("font-weight", null);
+                    .attr("font-weight", null)
+                    .attr("opacity", 1); // Reset opacity to full visibility
             });
+            
+            // Clear any stored highlighted elements
+            if (window.highlightedElements) {
+                const { incomingPaths, incomingTexts, outgoingPaths, outgoingTexts, relatedEdgeIndices } = window.highlightedElements;
+                
+                // Explicitly reset previously highlighted paths to their original gradients
+                if (incomingPaths) d3.selectAll(incomingPaths)
+                    .attr("stroke", function() {
+                        const edgeIndex = relatedEdgeIndices.get(this);
+                        return edgeIndex !== undefined ? `url(#gradient-${edgeIndex})` : CONFIG.COLOR_NONE;
+                    })
+                    .attr("stroke-opacity", CONFIG.EDGE_OPACITY)
+                    .attr("stroke-width", CONFIG.EDGE_WIDTH);
+                    
+                if (outgoingPaths) d3.selectAll(outgoingPaths)
+                    .attr("stroke", function() {
+                        const edgeIndex = relatedEdgeIndices.get(this);
+                        return edgeIndex !== undefined ? `url(#gradient-${edgeIndex})` : CONFIG.COLOR_NONE;
+                    })
+                    .attr("stroke-opacity", CONFIG.EDGE_OPACITY)
+                    .attr("stroke-width", CONFIG.EDGE_WIDTH);
+                    
+                // Reset text colors and opacity
+                if (incomingTexts) d3.selectAll(incomingTexts)
+                    .attr("fill", d => d.originalColor)
+                    .attr("font-weight", null)
+                    .attr("opacity", 1);
+                    
+                if (outgoingTexts) d3.selectAll(outgoingTexts)
+                    .attr("fill", d => d.originalColor)
+                    .attr("font-weight", null)
+                    .attr("opacity", 1);
+                
+                window.highlightedElements = null;
+            }
         }
 
-        function clearToggleState(tooltip) {
+        function clearToggleState() {
             if (toggledNode) {
                 d3.select(toggledNode.text)
                     .attr("font-weight", null)
@@ -740,8 +1050,8 @@ Click to toggle persistent tree view`));
             }
             toggledNode = null;
             isToggledMode = false;
-            tooltip.style("visibility", "hidden");
             resetAllEdges();
+            clearInfoPanel();
         }
 
         // Main execution

@@ -32,6 +32,7 @@ library
       Compression.SLFP
       Compression.Template
       Compression.TreeUtils
+      Experiment.BaseLine
       Experiment.Computation
       Experiment.IsmirExperiment
       Experiment.TismirExperiment

@@ -421,7 +421,7 @@
             // Create scales
             const x = d3.scaleLinear()
                 .domain([0, d3.max(data, d => d.originalSize)])
-                .range([0, width]);
+                .range([1, width]);
 
 
             const y = d3.scaleLinear()
