@@ -394,10 +394,11 @@ compressG g@(SLFP dE dpG drG dA) = case (mp, mr) of
   (Just (p, (plocs, savP)), Nothing) -> compressByP p plocs
   (Nothing, Just (r, (rlocs, savR))) -> compressByR r rlocs
   (Just (p, (plocs, savP)), Just (r, (rlocs, savR)))
+    
     | savP > savR -> compressByP p plocs
     | otherwise -> compressByR r rlocs
  where
-  -- compressByP p plocs -- just an idea: do p rewrite when possible to make more oppotunity of r-rewrite on large pattern
+--   -- compressByP p plocs -- just an idea: do p rewrite when possible to make more oppotunity of r-rewrite on large pattern
 
   compressLocally (SLFP x y z a) =
     SLFP

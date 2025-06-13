@@ -46,26 +46,141 @@
         #chart-container {
             display: flex;
             justify-content: center;
-            align-items: center;
+            align-items: flex-start;
             min-height: 600px;
             position: relative;
+            gap: 20px;
+        }
+
+        .visualization-container {
+            display: flex;
+            width: 100%;
+            max-width: 1600px;
+            gap: 20px;
         }
 
         #scatter-plot {
+            flex: 1;
             display: flex;
             flex-direction: column;
             align-items: center;
             justify-content: center;
             position: relative;
-            width: 100%;
-            max-width: 1000px;
-            margin: 0 auto;
+            min-width: 0;
         }
 
-        svg {
-            width: 100%;
-            height: auto;
-            max-height: 100vh;
+        #info-panel {
+            width: 50%;
+            min-width: 500px;
+            background-color: #f8f9fa;
+            border-radius: 8px;
+            border: 1px solid #e1e5e9;
+            height: fit-content;
+            max-height: 90vh;
+            overflow-y: auto;
+        }
+
+        .info-panel-header {
+            background-color: #e9ecef;
+            padding: 15px 20px;
+            border-bottom: 1px solid #dee2e6;
+            border-radius: 8px 8px 0 0;
+            font-weight: 600;
+            color: #495057;
+            font-size: 14px;
+        }
+
+        .info-panel-content {
+            padding: 20px;
+        }
+
+        .piece-details h3 {
+            margin: 0 0 15px 0;
+            font-size: 18px;
+            color: #2c3e50;
+            font-weight: 600;
+            letter-spacing: -0.025em;
+        }
+
+        .detail-item {
+            margin: 5px 0;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 4px 0;
+        }
+
+        .detail-label {
+            font-weight: 500;
+            color: #6b7280;
+            font-size: 13px;
+        }
+
+        .detail-value {
+            color: #666;
+        }
+
+        #tree-display {
+            border-radius: 5px;
+            padding: 10px;
+            margin-top: 15px;
+            min-height: 200px;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+        }
+
+        .tree-navigation {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 15px;
+            padding: 10px 15px;
+            background-color: #f8f9fa;
+            border: 1px solid #dee2e6;
+            border-radius: 6px;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+        }
+
+        .tree-nav-button {
+            background-color: #3498db;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            padding: 8px 12px;
+            cursor: pointer;
+            font-size: 13px;
+            font-weight: 500;
+            min-width: 70px;
+            transition: background-color 0.2s ease;
+        }
+
+        .tree-nav-button:hover:not(:disabled) {
+            background-color: #2980b9;
+        }
+
+        .tree-nav-button:disabled {
+            background-color: #bdc3c7;
+            cursor: not-allowed;
+            opacity: 0.6;
+        }
+
+        .tree-counter {
+            color: #495057;
+            font-size: 14px;
+            font-weight: 600;
+            background-color: #e9ecef;
+            padding: 6px 12px;
+            border-radius: 4px;
+            border: 1px solid #ced4da;
+        }
+
+        .tree-svg-container {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            flex: 1;
         }
 
         .tooltip {
@@ -88,14 +203,6 @@
             gap: 10px;
             flex-wrap: wrap;
             z-index: 10;
-        }
-
-        @media (max-width: 768px) {
-            .button-container {
-                position: static;
-                margin: 10px 0;
-                justify-content: center;
-            }
         }
 
         .save-button {
@@ -135,6 +242,13 @@
             border-radius: 4px;
             margin: 20px 0;
         }
+
+        .no-selection {
+            text-align: center;
+            color: #999;
+            font-style: italic;
+            padding: 40px 20px;
+        }
     </style>
 </head>
 
@@ -149,10 +263,18 @@
         </div>
 
         <div id="chart-container">
-            <div id="scatter-plot">
-                <div class="button-container">
-                    <button class="save-button" onclick="saveSVG()">Save as SVG</button>
-                    <button class="save-button" onclick="savePDF()">Save as PDF</button>
+            <div class="visualization-container">
+                <div id="scatter-plot">
+                    <div class="button-container">
+                        <button class="save-button" onclick="saveSVG()">Save as SVG</button>
+                        <button class="save-button" onclick="savePDF()">Save as PDF</button>
+                    </div>
+                </div>
+                <div id="info-panel">
+                    <div class="info-panel-header">Piece Information</div>
+                    <div class="info-panel-content">
+                        <div class="no-selection">Click on a data point to view piece details and tree visualization</div>
+                    </div>
                 </div>
             </div>
         </div>
@@ -404,10 +526,309 @@
             .append("g")
             .attr("transform", `translate(${margin.left + histogramHeight},${margin.top})`);
 
-        // Create tooltip div
-        const tooltip = d3.select("body").append("div")
-            .attr("class", "tooltip")
-            .style("opacity", 0);
+        // Tree node colors by tag (matching dependency plot)
+        const TREE_NODE_COLORS = {
+            "Prep": "rgba(255, 107, 107, 0.8)",      // Red for Prep nodes
+            "Prol": "rgba(78, 205, 196, 0.8)",       // Teal for Prol nodes  
+            "Term": "rgba(69, 183, 209, 0.8)",       // Blue for Term nodes
+            "Constant": "rgba(100, 200, 100, 0.8)",  // Green for Constant nodes
+            "Hole": "transparent",                   // Transparent for Hole nodes
+            "Prepare": "rgba(255, 107, 107, 0.8)",
+            "Split": "rgba(254, 202, 87, 0.8)",      // Yellow for Split nodes
+            "Var": "rgba(204, 204, 204, 0.8)",       // Gray for Var nodes
+            "default": "rgba(254, 202, 87, 0.8)"     // Default yellow for unknown tags
+        };
+
+        // Function to create tree tooltip SVG
+        function createTreeTooltipSVG(deCompressionProcess) {
+            if (!deCompressionProcess || deCompressionProcess.length === 0) return null;
+
+            // Take the first tree from the deCompressionProcess
+            const ruleTree = deCompressionProcess[0];
+            if (!ruleTree || ruleTree.length < 2) return null;
+
+            const rootNode = ruleTree[0];
+            const rootChildren = ruleTree[1];
+
+            function parseTree(item) {
+                if (Array.isArray(item)) {
+                    if (item.length >= 1) {
+                        const node = item[0];
+                        const children = item.length > 1 ? item[1] : [];
+
+                        if (node && typeof node === 'object' && !Array.isArray(node)) {
+                            let nodeText, nodeTag;
+                            if (node.tag === "Hole") {
+                                nodeText = "○";
+                                nodeTag = "Hole";
+                            } else if (node.tag === "Constant" && node.contents) {
+                                nodeText = node.contents.contents || node.contents.tag || "Constant";
+                                nodeTag = node.contents.tag || "Constant";
+                            } else if (node.tag === "Var") {
+                                nodeText = node.contents || "Var";
+                                nodeTag = "Var";
+                            } else {
+                                nodeText = node.contents || node.tag || "Node";
+                                nodeTag = node.tag;
+                            }
+
+                            const result = {
+                                name: nodeText,
+                                tag: nodeTag,
+                                nodeType: node.tag,
+                                children: []
+                            };
+
+                            if (Array.isArray(children)) {
+                                for (const child of children) {
+                                    const parsedChild = parseTree(child);
+                                    if (parsedChild) result.children.push(parsedChild);
+                                }
+                            }
+                            return result;
+                        }
+                    }
+                } else if (item && typeof item === 'object') {
+                    let nodeText, nodeTag, nodeType;
+                    if (item.tag === "Hole") {
+                        nodeText = "○";
+                        nodeTag = "Hole";
+                        nodeType = "Hole";
+                    } else if (item.tag === "Constant" && item.contents) {
+                        nodeText = item.contents.contents || item.contents.tag || "Constant";
+                        nodeTag = item.contents.tag || "Constant";
+                        nodeType = "Constant";
+                    } else if (item.tag === "Var") {
+                        nodeText = item.contents || "Var";
+                        nodeTag = "Var";
+                        nodeType = "Var";
+                    } else {
+                        nodeText = item.contents || item.tag || "Node";
+                        nodeTag = item.tag;
+                        nodeType = item.tag;
+                    }
+
+                    return {
+                        name: nodeText,
+                        tag: nodeTag,
+                        nodeType: nodeType,
+                        children: []
+                    };
+                }
+                return null;
+            }
+
+            let treeData;
+            if (rootNode.tag === "Hole") {
+                treeData = {
+                    name: "○",
+                    tag: "Hole",
+                    nodeType: "Hole",
+                    children: []
+                };
+            } else if (rootNode.tag === "Constant" && rootNode.contents) {
+                treeData = {
+                    name: rootNode.contents.contents || rootNode.contents.tag || "Constant",
+                    tag: rootNode.contents.tag || "Constant",
+                    nodeType: "Constant",
+                    children: []
+                };
+            } else if (rootNode.tag === "Var") {
+                treeData = {
+                    name: rootNode.contents || "Var",
+                    tag: "Var",
+                    nodeType: "Var",
+                    children: []
+                };
+            } else {
+                treeData = {
+                    name: rootNode.contents || rootNode.tag || "Root",
+                    tag: rootNode.tag,
+                    nodeType: rootNode.tag,
+                    children: []
+                };
+            }
+
+            if (Array.isArray(rootChildren)) {
+                for (const child of rootChildren) {
+                    const parsedChild = parseTree(child);
+                    if (parsedChild) treeData.children.push(parsedChild);
+                }
+            }
+
+            // Calculate tree dimensions
+            function calculateTreeDimensions(root) {
+                const hierarchy = d3.hierarchy(root);
+                const maxDepth = hierarchy.height;
+                const leaves = hierarchy.leaves().length;
+
+                // Get the full panel width (minus padding)
+                const infoPanel = document.getElementById('info-panel');
+                const panelWidth = infoPanel ? infoPanel.clientWidth - 40 : 460; // 20px padding on each side
+                
+                const minWidth = panelWidth;
+                const minHeight = 200;
+                const nodeWidth = 80;
+                const nodeHeight = 60;
+
+                // Use full panel width
+                const idealWidth = panelWidth;
+                const idealHeight = Math.max(minHeight, (maxDepth + 1) * nodeHeight + 80);
+
+                // Set maximum height constraint
+                const maxHeight = 400; // Maximum height to prevent overly tall trees
+
+                // Scale down height if needed
+                const scaleY = idealHeight > maxHeight ? maxHeight / idealHeight : 1;
+
+                return {
+                    width: idealWidth,
+                    height: Math.min(idealHeight, maxHeight),
+                    scale: scaleY,
+                    idealWidth: idealWidth,
+                    idealHeight: idealHeight
+                };
+            }
+
+            const dimensions = calculateTreeDimensions(treeData);
+            const treeWidth = dimensions.width;
+            const treeHeight = dimensions.height;
+            const scale = dimensions.scale;
+            const fontSize = Math.max(8, Math.min(12, (treeWidth / 50) * scale));
+
+            const treeSvg = d3.create("svg")
+                .attr("width", treeWidth)
+                .attr("height", treeHeight)
+                .style("background", "rgba(0, 0, 0, 0.9)")
+                .style("border-radius", "5px");
+
+            // Apply scaling to the tree layout based on ideal dimensions
+            const layoutWidth = (dimensions.idealWidth - 60) * scale;
+            const layoutHeight = (dimensions.idealHeight - 60) * scale;
+
+            const treeLayout = d3.tree()
+                .size([layoutWidth, layoutHeight])
+                .separation((a, b) => {
+                    // Calculate actual node widths for both nodes
+                    const aTextLength = a.data.name.length;
+                    const bTextLength = b.data.name.length;
+                    const aWidth = Math.max(aTextLength * fontSize * 0.6 + 24, fontSize * 3);
+                    const bWidth = Math.max(bTextLength * fontSize * 0.6 + 24, fontSize * 3);
+                    
+                    // Calculate minimum separation needed to prevent overlap
+                    const minSeparation = (aWidth + bWidth) / 2 + 20; // Extra padding
+                    
+                    // Scale separation based on available width and tree scale
+                    const baseSeparation = Math.max(2.0, minSeparation / 60);
+                    
+                    // Increase separation for siblings vs cousins
+                    const isSibling = a.parent === b.parent;
+                    const separationMultiplier = isSibling ? 1.5 : 1.0;
+                    
+                    return baseSeparation * separationMultiplier / scale;
+                });
+
+            const hierarchyTree = d3.hierarchy(treeData);
+            const treeNodes = treeLayout(hierarchyTree);
+
+            const g = treeSvg.append("g")
+                .attr("transform", `translate(${treeWidth/2 - layoutWidth/2}, ${treeHeight/2 - layoutHeight/2})`);
+
+            // Add links with scaled stroke width
+            g.selectAll(".tree-link")
+                .data(treeNodes.links())
+                .enter().append("line")
+                .attr("class", "tree-link")
+                .attr("x1", d => d.source.x)
+                .attr("y1", d => d.source.y)
+                .attr("x2", d => d.target.x)
+                .attr("y2", d => d.target.y)
+                .style("stroke", "#999")
+                .style("stroke-width", Math.max(1, 2 * scale));
+
+            // Add nodes
+            const node = g.selectAll(".tree-node")
+                .data(treeNodes.descendants())
+                .enter().append("g")
+                .attr("class", "tree-node")
+                .attr("transform", d => `translate(${d.x},${d.y})`);
+
+            // Add background shapes with scaled dimensions and overlap prevention
+            node.each(function (d) {
+                const nodeElement = d3.select(this);
+                const textLength = d.data.name.length;
+                
+                // Calculate available space based on tree width and number of leaves at this level
+                const levelNodes = treeNodes.descendants().filter(n => n.depth === d.depth);
+                const availableWidth = layoutWidth / Math.max(levelNodes.length, 1);
+                const maxNodeWidth = availableWidth * 0.8; // Leave some spacing between nodes
+                
+                // Start with base font size and scale down if needed
+                let adjustedFontSize = fontSize;
+                let nodeWidth = Math.max(textLength * adjustedFontSize * 0.6 + 12, adjustedFontSize * 2.5);
+                
+                // Shrink font size if node would be too wide
+                while (nodeWidth > maxNodeWidth && adjustedFontSize > 6) {
+                    adjustedFontSize -= 0.5;
+                    nodeWidth = Math.max(textLength * adjustedFontSize * 0.6 + 12, adjustedFontSize * 2.5);
+                }
+                
+                // Apply overall scale factor
+                const finalFontSize = Math.max(6, adjustedFontSize * scale);
+                const finalNodeWidth = Math.min(nodeWidth * scale, maxNodeWidth);
+                const finalNodeHeight = Math.max(finalFontSize * 1.4 + 6, finalFontSize + 4);
+
+                if (d.data.nodeType !== "Hole") {
+                    nodeElement.append("rect")
+                        .attr("width", finalNodeWidth)
+                        .attr("height", finalNodeHeight)
+                        .attr("x", -finalNodeWidth / 2)
+                        .attr("y", -finalNodeHeight / 2)
+                        .attr("rx", Math.max(2, finalFontSize * 0.25))
+                        .style("fill", d => {
+                            const nodeTag = d.data.tag || d.data.nodeType;
+                            return TREE_NODE_COLORS[nodeTag] || TREE_NODE_COLORS.default;
+                        })
+                        .style("stroke", "#fff")
+                        .style("stroke-width", Math.max(0.5, finalFontSize * 0.1));
+                }
+                
+                // Store the final font size for text rendering
+                d._finalFontSize = finalFontSize;
+                d._finalNodeWidth = finalNodeWidth;
+                d._adjustedFontSize = adjustedFontSize;
+            });
+
+            // Add text labels with dynamically scaled font and smart truncation
+            node.append("text")
+                .attr("text-anchor", "middle")
+                .attr("dy", "0.35em")
+                .style("font-family", "monospace")
+                .style("font-size", d => `${d._finalFontSize}px`)
+                .style("fill", "white")
+                .style("font-weight", "bold")
+                .style("text-shadow", "1px 1px 2px rgba(0,0,0,0.8)")
+                .text(d => {
+                    const text = d.data.name;
+                    const maxWidth = d._finalNodeWidth - 8; // Padding inside node
+                    const charWidth = d._finalFontSize * 0.6;
+                    const maxChars = Math.floor(maxWidth / charWidth);
+                    
+                    // Truncate text if needed
+                    if (text.length > maxChars && maxChars > 3) {
+                        if (maxChars <= 6) {
+                            // Very small space - just show first few chars
+                            return text.substring(0, maxChars);
+                        } else {
+                            // Enough space for ellipsis
+                            return text.substring(0, maxChars - 3) + "...";
+                        }
+                    }
+                    return text;
+                });
+
+            return treeSvg.node();
+        }
 
         // Embedded JSON data
         const data = {{{dataSet}}};
@@ -583,8 +1004,6 @@
                         .duration(200)
                         .style("opacity", .9);
 
-
-
                     // Calculate tooltip position relative to the visualization container
                     const containerRect = document.getElementById('scatter-plot').getBoundingClientRect();
                     const tooltipX = event.pageX + 10;
@@ -596,12 +1015,29 @@
                 })
                 .on("mouseout", function () {
                     d3.select(this)
-                        .style("fill", "grey")
+                        .style("fill", selectedPiece === this.__data__ ? "#2e8b57" : "grey")
                         .attr("r", width < 500 ? 4 : 6);
 
                     tooltip.transition()
                         .duration(500)
                         .style("opacity", 0);
+                })
+                .on("click", function (event, d) {
+                    // Highlight clicked circle
+                    svg.selectAll("circle")
+                        .style("fill", "grey")
+                        .style("stroke", "none");
+
+                    d3.select(this)
+                        .style("fill", "#2e8b57")
+                        .style("stroke", "#1e5931")
+                        .style("stroke-width", 2);
+
+                    // Update info panel with selected data
+                    updateInfoPanel(d);
+                    selectedPiece = d;
+
+                    event.stopPropagation();
                 })
                 .on("touchstart", function (event, d) {
                     event.preventDefault();
@@ -656,10 +1092,460 @@
                 .text("{{figureName}}");
         })();
 
-        // Handle window resize
-        window.addEventListener('resize', function () {
-            // For a complete solution, we would redraw the chart
-            // This is simplified to avoid complexity
+        // Global state for panel
+        let selectedPiece = null;
+        let currentTreeIndex = 0;
+        let currentTrees = [];
+
+        // Function to create tree SVG for a specific index
+        function createTreeSVGForIndex(deCompressionProcess, index) {
+            if (!deCompressionProcess || deCompressionProcess.length === 0 || index >= deCompressionProcess.length) return null;
+
+            const ruleTree = deCompressionProcess[index];
+            if (!ruleTree || ruleTree.length < 2) return null;
+
+            const rootNode = ruleTree[0];
+            const rootChildren = ruleTree[1];
+
+            function parseTree(item) {
+                if (Array.isArray(item)) {
+                    if (item.length >= 1) {
+                        const node = item[0];
+                        const children = item.length > 1 ? item[1] : [];
+
+                        if (node && typeof node === 'object' && !Array.isArray(node)) {
+                            let nodeText, nodeTag;
+                            if (node.tag === "Hole") {
+                                nodeText = "○";
+                                nodeTag = "Hole";
+                            } else if (node.tag === "Constant" && node.contents) {
+                                nodeText = node.contents.contents || node.contents.tag || "Constant";
+                                nodeTag = node.contents.tag || "Constant";
+                            } else if (node.tag === "Var") {
+                                nodeText = node.contents || "Var";
+                                nodeTag = "Var";
+                            } else {
+                                nodeText = node.contents || node.tag || "Node";
+                                nodeTag = node.tag;
+                            }
+
+                            const result = {
+                                name: nodeText,
+                                tag: nodeTag,
+                                nodeType: node.tag,
+                                children: []
+                            };
+
+                            if (Array.isArray(children)) {
+                                for (const child of children) {
+                                    const parsedChild = parseTree(child);
+                                    if (parsedChild) result.children.push(parsedChild);
+                                }
+                            }
+                            return result;
+                        }
+                    }
+                } else if (item && typeof item === 'object') {
+                    let nodeText, nodeTag, nodeType;
+                    if (item.tag === "Hole") {
+                        nodeText = "○";
+                        nodeTag = "Hole";
+                        nodeType = "Hole";
+                    } else if (item.tag === "Constant" && item.contents) {
+                        nodeText = item.contents.contents || item.contents.tag || "Constant";
+                        nodeTag = item.contents.tag || "Constant";
+                        nodeType = "Constant";
+                    } else if (item.tag === "Var") {
+                        nodeText = item.contents || "Var";
+                        nodeTag = "Var";
+                        nodeType = "Var";
+                    } else {
+                        nodeText = item.contents || item.tag || "Node";
+                        nodeTag = item.tag;
+                        nodeType = item.tag;
+                    }
+
+                    return {
+                        name: nodeText,
+                        tag: nodeTag,
+                        nodeType: nodeType,
+                        children: []
+                    };
+                }
+                return null;
+            }
+
+            let treeData;
+            if (rootNode.tag === "Hole") {
+                treeData = {
+                    name: "○",
+                    tag: "Hole",
+                    nodeType: "Hole",
+                    children: []
+                };
+            } else if (rootNode.tag === "Constant" && rootNode.contents) {
+                treeData = {
+                    name: rootNode.contents.contents || rootNode.contents.tag || "Constant",
+                    tag: rootNode.contents.tag || "Constant",
+                    nodeType: "Constant",
+                    children: []
+                };
+            } else if (rootNode.tag === "Var") {
+                treeData = {
+                    name: rootNode.contents || "Var",
+                    tag: "Var",
+                    nodeType: "Var",
+                    children: []
+                };
+            } else {
+                treeData = {
+                    name: rootNode.contents || rootNode.tag || "Root",
+                    tag: rootNode.tag,
+                    nodeType: rootNode.tag,
+                    children: []
+                };
+            }
+
+            if (Array.isArray(rootChildren)) {
+                for (const child of rootChildren) {
+                    const parsedChild = parseTree(child);
+                    if (parsedChild) treeData.children.push(parsedChild);
+                }
+            }
+
+            // Calculate tree dimensions
+            function calculateTreeDimensions(root) {
+                const hierarchy = d3.hierarchy(root);
+                const maxDepth = hierarchy.height;
+                const leaves = hierarchy.leaves().length;
+
+                // Get the full panel width (minus padding)
+                const infoPanel = document.getElementById('info-panel');
+                const panelWidth = infoPanel ? infoPanel.clientWidth - 40 : 460; // 20px padding on each side
+                
+                const minWidth = panelWidth;
+                const minHeight = 200;
+                const nodeWidth = 80;
+                const nodeHeight = 60;
+
+                // Use full panel width
+                const idealWidth = panelWidth;
+                const idealHeight = Math.max(minHeight, (maxDepth + 1) * nodeHeight + 80);
+
+                // Set maximum height constraint
+                const maxHeight = 400; // Maximum height to prevent overly tall trees
+
+                // Scale down height if needed
+                const scaleY = idealHeight > maxHeight ? maxHeight / idealHeight : 1;
+
+                return {
+                    width: idealWidth,
+                    height: Math.min(idealHeight, maxHeight),
+                    scale: scaleY,
+                    idealWidth: idealWidth,
+                    idealHeight: idealHeight
+                };
+            }
+
+            const dimensions = calculateTreeDimensions(treeData);
+            const treeWidth = dimensions.width;
+            const treeHeight = dimensions.height;
+            const scale = dimensions.scale;
+            const fontSize = Math.max(8, Math.min(12, (treeWidth / 50) * scale));
+
+            const treeSvg = d3.create("svg")
+                .attr("width", treeWidth)
+                .attr("height", treeHeight)
+                .style("background", "rgba(0, 0, 0, 0.9)")
+                .style("border-radius", "5px");
+
+            // Apply scaling to the tree layout based on ideal dimensions
+            const layoutWidth = (dimensions.idealWidth - 60) * scale;
+            const layoutHeight = (dimensions.idealHeight - 60) * scale;
+
+            const treeLayout = d3.tree()
+                .size([layoutWidth, layoutHeight])
+                .separation((a, b) => {
+                    // Calculate actual node widths for both nodes
+                    const aTextLength = a.data.name.length;
+                    const bTextLength = b.data.name.length;
+                    const aWidth = Math.max(aTextLength * fontSize * 0.6 + 24, fontSize * 3);
+                    const bWidth = Math.max(bTextLength * fontSize * 0.6 + 24, fontSize * 3);
+                    
+                    // Calculate minimum separation needed to prevent overlap
+                    const minSeparation = (aWidth + bWidth) / 2 + 20; // Extra padding
+                    
+                    // Scale separation based on available width and tree scale
+                    const baseSeparation = Math.max(2.0, minSeparation / 60);
+                    
+                    // Increase separation for siblings vs cousins
+                    const isSibling = a.parent === b.parent;
+                    const separationMultiplier = isSibling ? 1.5 : 1.0;
+                    
+                    return baseSeparation * separationMultiplier / scale;
+                });
+
+            const hierarchyTree = d3.hierarchy(treeData);
+            const treeNodes = treeLayout(hierarchyTree);
+
+            const g = treeSvg.append("g")
+                .attr("transform", `translate(${treeWidth/2 - layoutWidth/2}, ${treeHeight/2 - layoutHeight/2})`);
+
+            // Add links with scaled stroke width
+            g.selectAll(".tree-link")
+                .data(treeNodes.links())
+                .enter().append("line")
+                .attr("class", "tree-link")
+                .attr("x1", d => d.source.x)
+                .attr("y1", d => d.source.y)
+                .attr("x2", d => d.target.x)
+                .attr("y2", d => d.target.y)
+                .style("stroke", "#999")
+                .style("stroke-width", Math.max(1, 2 * scale));
+
+            // Add nodes
+            const node = g.selectAll(".tree-node")
+                .data(treeNodes.descendants())
+                .enter().append("g")
+                .attr("class", "tree-node")
+                .attr("transform", d => `translate(${d.x},${d.y})`);
+
+            // Add background shapes with scaled dimensions and overlap prevention
+            node.each(function (d) {
+                const nodeElement = d3.select(this);
+                const textLength = d.data.name.length;
+                
+                // Calculate available space based on tree width and number of leaves at this level
+                const levelNodes = treeNodes.descendants().filter(n => n.depth === d.depth);
+                const availableWidth = layoutWidth / Math.max(levelNodes.length, 1);
+                const maxNodeWidth = availableWidth * 0.8; // Leave some spacing between nodes
+                
+                // Start with base font size and scale down if needed
+                let adjustedFontSize = fontSize;
+                let nodeWidth = Math.max(textLength * adjustedFontSize * 0.6 + 12, adjustedFontSize * 2.5);
+                
+                // Shrink font size if node would be too wide
+                while (nodeWidth > maxNodeWidth && adjustedFontSize > 6) {
+                    adjustedFontSize -= 0.5;
+                    nodeWidth = Math.max(textLength * adjustedFontSize * 0.6 + 12, adjustedFontSize * 2.5);
+                }
+                
+                // Apply overall scale factor
+                const finalFontSize = Math.max(6, adjustedFontSize * scale);
+                const finalNodeWidth = Math.min(nodeWidth * scale, maxNodeWidth);
+                const finalNodeHeight = Math.max(finalFontSize * 1.4 + 6, finalFontSize + 4);
+
+                if (d.data.nodeType !== "Hole") {
+                    nodeElement.append("rect")
+                        .attr("width", finalNodeWidth)
+                        .attr("height", finalNodeHeight)
+                        .attr("x", -finalNodeWidth / 2)
+                        .attr("y", -finalNodeHeight / 2)
+                        .attr("rx", Math.max(2, finalFontSize * 0.25))
+                        .style("fill", d => {
+                            const nodeTag = d.data.tag || d.data.nodeType;
+                            return TREE_NODE_COLORS[nodeTag] || TREE_NODE_COLORS.default;
+                        })
+                        .style("stroke", "#fff")
+                        .style("stroke-width", Math.max(0.5, finalFontSize * 0.1));
+                }
+                
+                // Store the final font size for text rendering
+                d._finalFontSize = finalFontSize;
+                d._finalNodeWidth = finalNodeWidth;
+                d._adjustedFontSize = adjustedFontSize;
+            });
+
+            // Add text labels with dynamically scaled font and smart truncation
+            node.append("text")
+                .attr("text-anchor", "middle")
+                .attr("dy", "0.35em")
+                .style("font-family", "monospace")
+                .style("font-size", d => `${d._finalFontSize}px`)
+                .style("fill", "white")
+                .style("font-weight", "bold")
+                .style("text-shadow", "1px 1px 2px rgba(0,0,0,0.8)")
+                .text(d => {
+                    const text = d.data.name;
+                    const maxWidth = d._finalNodeWidth - 8; // Padding inside node
+                    const charWidth = d._finalFontSize * 0.6;
+                    const maxChars = Math.floor(maxWidth / charWidth);
+                    
+                    // Truncate text if needed
+                    if (text.length > maxChars && maxChars > 3) {
+                        if (maxChars <= 6) {
+                            // Very small space - just show first few chars
+                            return text.substring(0, maxChars);
+                        } else {
+                            // Enough space for ellipsis
+                            return text.substring(0, maxChars - 3) + "...";
+                        }
+                    }
+                    return text;
+                });
+
+            return treeSvg.node();
+        }
+
+        // Function to navigate to previous tree
+        window.navigateToPreviousTree = function() {
+            if (currentTreeIndex > 0) {
+                currentTreeIndex--;
+                updateTreeDisplay();
+            }
+        }
+
+        // Function to navigate to next tree
+        window.navigateToNextTree = function() {
+            if (currentTreeIndex < currentTrees.length - 1) {
+                currentTreeIndex++;
+                updateTreeDisplay();
+            }
+        }
+
+        // Function to update tree display
+        function updateTreeDisplay() {
+            const treeContainer = document.querySelector('.tree-svg-container');
+            const treeCounter = document.querySelector('.tree-counter');
+            const prevButton = document.querySelector('#prev-tree');
+            const nextButton = document.querySelector('#next-tree');
+
+            if (treeContainer && currentTrees.length > 0) {
+                // Clear existing SVG
+                treeContainer.innerHTML = '';
+
+                // Create new SVG for current index
+                const treeSvg = createTreeSVGForIndex(currentTrees, currentTreeIndex);
+                if (treeSvg) {
+                    treeContainer.appendChild(treeSvg);
+                }
+
+                // Update counter
+                if (treeCounter) {
+                    treeCounter.textContent = `${currentTreeIndex + 1} / ${currentTrees.length}`;
+                }
+
+                // Update button states
+                if (prevButton) {
+                    prevButton.disabled = currentTreeIndex === 0;
+                }
+                if (nextButton) {
+                    nextButton.disabled = currentTreeIndex === currentTrees.length - 1;
+                }
+            }
+        }
+
+        // Function to update info panel
+        function updateInfoPanel(d) {
+            const infoContent = document.querySelector('.info-panel-content');
+
+            // Create piece details
+            const pieceDetailsHtml = `
+                <div class="piece-details">
+                    <h3>${d.{{_hoverInfo}}}</h3>
+                    <div class="detail-item">
+                        <span class="detail-label">{{xLabel}}:</span>
+                        <span class="detail-value">${d.{{_X}}}</span>
+                    </div>
+                    <div class="detail-item">
+                        <span class="detail-label">{{yLabel}}:</span>
+                        <span class="detail-value">${d.{{_Y}}}</span>
+                    </div>
+                    ${d.compressedSize ? `<div class="detail-item">
+                        <span class="detail-label">Compression Ratio:</span>
+                        <span class="detail-value">${(d.{{_X}} / d.{{_Y}}).toFixed(2)}</span>
+                    </div>` : ''}
+                    ${d.globalFreq ? `<div class="detail-item">
+                        <span class="detail-label">Global Frequency:</span>
+                        <span class="detail-value">${d.globalFreq}</span>
+                    </div>` : ''}
+                    ${d.sizeExpanded ? `<div class="detail-item">
+                        <span class="detail-label">Size Expanded:</span>
+                        <span class="detail-value">${d.sizeExpanded}</span>
+                    </div>` : ''}
+                </div>
+            `;
+
+            // Add tree display with navigation
+            let treeHtml = '<div id="tree-display">';
+            if (d.deCompressionProcess && d.deCompressionProcess.length > 0) {
+                // Set global state for tree navigation
+                currentTrees = d.deCompressionProcess;
+                currentTreeIndex = 0;
+
+                // Create navigation controls regardless of tree count
+                treeHtml += `
+                    <div class="tree-navigation">
+                        <button id="prev-tree" class="tree-nav-button" disabled>← Prev</button>
+                        <span class="tree-counter">1 / ${currentTrees.length}</span>
+                        <button id="next-tree" class="tree-nav-button" ${currentTrees.length <= 1 ? 'disabled' : ''}>Next →</button>
+                    </div>
+                `;
+
+                treeHtml += '<div class="tree-svg-container">';
+
+                // Create initial tree SVG
+                const treeSvg = createTreeSVGForIndex(currentTrees, 0);
+                if (treeSvg) {
+                    treeHtml += treeSvg.outerHTML;
+                } else {
+                    treeHtml += '<div class="no-selection">No tree visualization available</div>';
+                }
+                
+                treeHtml += '</div>';
+            } else {
+                treeHtml += '<div class="no-selection">No decompression process available</div>';
+            }
+            treeHtml += '</div>';
+
+            infoContent.innerHTML = pieceDetailsHtml + treeHtml;
+
+            // Bind event handlers after DOM is updated - regardless of tree count
+            if (d.deCompressionProcess && d.deCompressionProcess.length > 0) {
+                const prevButton = document.querySelector('#prev-tree');
+                const nextButton = document.querySelector('#next-tree');
+                
+                if (prevButton) {
+                    prevButton.addEventListener('click', function() {
+                        if (currentTreeIndex > 0) {
+                            currentTreeIndex--;
+                            updateTreeDisplay();
+                        }
+                    });
+                }
+                
+                if (nextButton) {
+                    nextButton.addEventListener('click', function() {
+                        if (currentTreeIndex < currentTrees.length - 1) {
+                            currentTreeIndex++;
+                            updateTreeDisplay();
+                        }
+                    });
+                }
+            }
+        }
+
+        // Create tooltip div
+        const tooltip = d3.select("body").append("div")
+            .attr("class", "tooltip")
+            .style("opacity", 0);
+
+        // Function to clear info panel
+        function clearInfoPanel() {
+            const infoContent = document.querySelector('.info-panel-content');
+            infoContent.innerHTML = '<div class="no-selection">Click on a data point to view piece details and tree visualization</div>';
+        }
+
+        // Add background click handler to clear selection
+        d3.select('body').on('click', function(event) {
+            if (!event.target.closest('circle') && !event.target.closest('#info-panel')) {
+                // Clear selection
+                svg.selectAll("circle")
+                    .style("fill", "grey")
+                    .style("stroke", "none");
+                selectedPiece = null;
+                clearInfoPanel();
+            }
         });
     </script>
 </body>

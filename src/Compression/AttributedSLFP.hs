@@ -82,8 +82,8 @@ pSubstitutionTopAttributed defB n (patID, Comp i r y) f (Node (b, _) ts) =
             ++ [Node (initAttr y, y) (take n . drop (i - 1) $ ts)]
             ++ drop (i + n - 1) ts
   where
-    initAttr (Var patID2) = f defB patID2 i r
-    initAttr _ = defB
+    -- initAttr (Var patID2) = f defB patID2 i r
+    initAttr = const defB
     updatedAttr = f b patID i r -- only the top g's atttribute in @g oi f@ updated (for the task of locating the pattern)
     
 

@@ -80,12 +80,12 @@ readPlotScatter mkConfig figTitle dataPath outPath = do
 main = do
     readPlotScatter mkScatterConfigCompression
         "Piece-wise compression (Harmony)"
-        "Experiment/Result/Harmony/pieceSizeComparison.json"
+        "Experiment/Result/Harmony/pieceInfo.json"
         "Experiment/Result/Harmony/CompressionScatterPlot(Harmony).html"
 
     readPlotScatter mkScatterConfigCompression
         "Piece-wise compression (Rhythm)"
-        "Experiment/Result/Rhythm/Classical/pieceSizeComparison.json"
+        "Experiment/Result/Rhythm/Classical/pieceInfo.json"
         "Experiment/Result/Rhythm/Classical/CompressionScatterPlot(Rhythm).html"
 
     readPlotScatter mkScatterConfigFreqSize 

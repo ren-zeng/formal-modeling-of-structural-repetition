@@ -51,9 +51,11 @@ plotPatternLocs = do
     Just finalSLFP <-
         decodeFileStrict @(SLFP RuleNames PieceID) $
             repoRoot <> "/Experiment/Result/Harmony/finalSLFP.json"
-
-    let treesToShow = take 2 $ elems locs
-    let globalPatternUsed :: Set PatternID =
+    let piecesToShow = ["(Valid)Solar"]
+    let pieceTreeCompressed  =
+            compressedTree . (sltps finalSLFP Map.!) 
+    let treeToShow pieceTitle = locs Map.! pieceTitle
+    let globalPatternUsed titles =
             foldMap
                 ( foldMap
                     ( Set.fromList
@@ -61,9 +63,21 @@ plotPatternLocs = do
                             (`Map.member` globalPatterns finalSLFP)
                         . fst
                     )
+                    . treeToShow
                 )
-                treesToShow
-    let patternAppendix =
+                titles
+    -- let globalMetaUsed titles =
+    --         foldMap
+    --             ( foldMap
+    --                 ( Set.fromList
+    --                     . Data.List.filter
+    --                         (`Map.member` globalMetas finalSLFP)
+    --                     . fst
+    --                 )
+    --                 . treeToShow
+    --             )
+    --             titles
+    let patternAppendix titles =
             hsep 1 $
                 ( \x ->
                     vsep
@@ -74,19 +88,44 @@ plotPatternLocs = do
                             (patternAsComputation finalSLFP x)
                         ]
                 )
-                    <$> Set.toList globalPatternUsed
+                    <$> Set.toList (globalPatternUsed titles)
+    -- let metaAppendix titles = 
+    --         hsep 1 $ 
+    --         ( \x ->
+    --             vsep
+    --                 1
+    --                 [ drawText x
+    --                 ,
+    --                     (drawText . show . pretty)
+    --                     (globalMetas finalSLFP Map.! x)
+    --                 ]
+    --         ) <$>
+    --             Set.toList (globalMetaUsed titles)
+    
+    let drawNode (x, y) =
+            vsep
+                1
+                [ drawText . show . pretty $ y
+                , (drawText . show) x
+                ]
+                # frame 1
+                # centerY
+    let pieceDiagram pieceTitle =
+            vsep
+                1
+                [ drawText pieceTitle
+                , treeDiagram 
+                    (drawText . show . pretty) 
+                    (pieceTreeCompressed pieceTitle)
+                , treeDiagram
+                    drawNode
+                    (treeToShow pieceTitle)
+                ]
     let diagram =
             vsep
                 1
-                [   hsep 1
-                    $ fmap
-                        (treeDiagram (\(x, y) -> centerY $ frame 1$  vsep 1 [
-                            drawText . show . pretty $ y,
-                            (drawText . show) x
-                            ]))
-                    $ take 2
-                    $ elems locs
-                , patternAppendix
+                [ hsep 1 $ pieceDiagram <$> piecesToShow
+                , patternAppendix piecesToShow
                 ]
     renderSVG
         (repoRoot <> "/Experiment/Result/Harmony/" <> "PatternLocs.svg")

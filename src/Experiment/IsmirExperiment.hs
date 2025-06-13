@@ -56,15 +56,26 @@ ruleSummary slfp =
 individualPieceChange :: (Ord k) => SLFP a1 k -> SLFP a2 k -> Map.Map k (Int, Int)
 individualPieceChange slfpOrig selfFin = Map.intersectionWith (,) (size <$> sltps slfpOrig) (size <$> sltps selfFin)
 
-data SizeChange = SizeChange
-    { pieceName :: String
+-- data SizeChange = SizeChange
+--     { pieceName :: String
+--     , originalSize :: Int
+--     , compressedSize :: Int
+--     }
+--     deriving (Generic, Show)
+
+-- instance ToJSON SizeChange
+-- instance FromJSON SizeChange
+
+data PieceInfo k r = PieceInfo
+    { pieceName :: k
     , originalSize :: Int
     , compressedSize :: Int
+    , deCompressionProcess :: [Tree (Abstraction r)]
     }
     deriving (Generic, Show)
 
-instance ToJSON SizeChange
-instance FromJSON SizeChange
+instance (ToJSON k, ToJSON r) => ToJSON (PieceInfo k r)
+instance (FromJSON k, FromJSON r) =>  FromJSON (PieceInfo k r)
 
 data SizeCurve = SizeCurve
     { step :: Int
@@ -82,12 +93,15 @@ reportCompression resultDir slfp = do
         final = last steps
         ms = minedMetas final
         ruleStats = ruleSummary final
-        pieceSizeComparison = (\(k, (ori, fin)) -> SizeChange (show $ pretty k) ori fin) <$> Map.toList (individualPieceChange slfp final)
+        pieceInfos = fmap (\(k,((m,n),ts)) -> PieceInfo k m n ts) $ Map.toList $ Map.intersectionWith 
+            (,)
+            (individualPieceChange slfp final)
+            (pieceDecompressProcess final)
 
     encodeFile (resultDir <> "/finalSLFP.json") final
     encodeFile (resultDir <> "/globalMetas.json") ms
     encodeFile (resultDir <> "/ruleStats.json") ruleStats
-    encodeFile (resultDir <> "/pieceSizeComparison.json") pieceSizeComparison
+
     encodeFile
         (resultDir <> "sizeCurve.json")
         (uncurry SizeCurve <$> zip [1 ..] (size <$> steps))
@@ -100,6 +114,7 @@ reportCompression resultDir slfp = do
     let patternInfo = mkPatternInfo final <$> Map.keys (globalPatterns final)
     
     encodeFile (resultDir <> "/patternInfo.json") patternInfo
+    encodeFile (resultDir <> "/pieceInfo.json") pieceInfos
 
 type PatternID = String
 

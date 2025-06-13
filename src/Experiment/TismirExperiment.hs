@@ -5,7 +5,6 @@ module Experiment.TismirExperiment (
     patternAsComputation,
     patternSizeExpanded,
 
-
     -- * (Pattern dependencies)
     patternDependents,
     directDependents,
@@ -13,7 +12,7 @@ module Experiment.TismirExperiment (
     patternImpact,
 
     -- * (Where are the patterns?) pattern usage
-
+    pieceDecompressProcess,
     -- patternGlobalFreq,
     patternFreqInCorpus,
     patternOccuranceG,
@@ -66,19 +65,24 @@ type PatternID = String
 
 patternAsComputation :: (_) => SLFP r k -> PatternID -> Tree (Abstraction r)
 patternAsComputation slfp patId =
-    
     fixedPoint
-            ( deCompressTree
-                (globalPatterns slfp Map.!)
-                (globalMetas slfp Map.!)
-                (arities slfp Map.!)
-            )
+        ( deCompressTree
+            (globalPatterns slfp Map.!)
+            (globalMetas slfp Map.!)
+            (arities slfp Map.!)
+        )
         $ startingTree
   where
-    startingTree = Node (Var patId) 
-        $ replicate (inferArity 
-            (globalPatterns slfp Map.!) (globalMetas slfp Map.!) (arities slfp Map.!) (Var patId)) 
-        $ Node Hole []
+    startingTree =
+        Node (Var patId)
+            $ replicate
+                ( inferArity
+                    (globalPatterns slfp Map.!)
+                    (globalMetas slfp Map.!)
+                    (arities slfp Map.!)
+                    (Var patId)
+                )
+            $ Node Hole []
 
 patternSizeExpanded :: (_) => SLFP r k -> PatternID -> Int
 patternSizeExpanded slfp = sizeTree . patternAsComputation slfp
@@ -154,11 +158,12 @@ markPatternIdDecompressed ::
 markPatternIdDecompressed slfp =
     fixedPoint
         (Attributed.deCompressGAttributed [] updateAttr)
-        $ Attributed.toSLFPAttributed initPatternList slfp
+        $ Attributed.toSLFPAttributed (const []) slfp
   where
     updateAttr b pID i x = b ++ [pID]
-    initPatternList (Var x) = [x]
-    initPatternList _ = []
+
+-- initPatternList (Var x) = [x]
+-- initPatternList _ = []
 
 markPatternIdInCorpus ::
     (_) =>
@@ -331,3 +336,18 @@ sumOverRank xs = sum $ zipWith (*) [1 ..] $ sortBy (comparing Down) xs
 
 -- >>> sumOverRank [2,5,1]
 -- 12.0
+
+iterateTilFixed :: Eq t => (t -> t) -> t -> [t]
+iterateTilFixed f x = let next = f x in 
+    if next == x
+        then [x]
+        else x : iterateTilFixed f next
+
+pieceDecompressProcess :: (_) => SLFP r k -> Map k [Tree (Abstraction r)]
+pieceDecompressProcess slfp = nub . fmap compressedTree <$> pieceSLTPs
+  where
+    pieceSLTPs = Map.unionsWith (++) $ fmap pure . sltps <$> iterateTilFixed deCompressG slfp
+
+
+-- >>> iterateTilFixed (\x -> if x == 0 then 0 else x - 1 ) 12
+-- [12,11,10,9,8,7,6,5,4,3,2,1,0]
