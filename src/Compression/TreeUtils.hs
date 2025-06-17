@@ -3,6 +3,7 @@ module Compression.TreeUtils where
 import Data.Aeson
 import Data.Tree
 import GHC.Generics
+import Data.Foldable
 
 {- Location represent where a node is in a `Tree`. Location indexing start with 1, conforming to the notion of "the first argument"
 -}
@@ -44,3 +45,23 @@ indexToLocation n t = leafLocations t !! n
 
 sizeTree :: Tree a -> Int 
 sizeTree = foldTree $ \_ bs -> 1 + sum bs
+
+
+fillHoles :: (a -> Bool) -> Tree a -> [Tree a] -> Tree a
+fillHoles isHole = foldl' (appHole isHole)
+
+appHole :: (a -> Bool) -> Tree a -> Tree a -> Tree a
+appHole isHole (Node x []) t1
+    | isHole x = t1 
+appHole isHole (Node x ts) t1 = case tsRemain of 
+    [] -> Node x ts 
+    t:ts' -> Node x (tsPrev ++ appHole isHole t t1 : ts' )
+    where 
+        (tsPrev,tsRemain) = break (any isHole) ts
+
+testfillHoles = fillHoles 
+    (=="H") 
+    (Node "1" [Node "H" [],Node "2" [Node "3" [],Node "H" []]]) 
+    [Node "99" [], Node "98" []]
+-- >>> testfillHoles
+-- Node {rootLabel = "1", subForest = [Node {rootLabel = "99", subForest = []},Node {rootLabel = "2", subForest = [Node {rootLabel = "3", subForest = []},Node {rootLabel = "98", subForest = []}]}]}

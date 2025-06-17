@@ -526,29 +526,86 @@
             .append("g")
             .attr("transform", `translate(${margin.left + histogramHeight},${margin.top})`);
 
-        // Tree node colors by tag (matching dependency plot)
+        // Tree node colors and utility functions
         const TREE_NODE_COLORS = {
-            "Prep": "rgba(255, 107, 107, 0.8)",      // Red for Prep nodes
-            "Prol": "rgba(78, 205, 196, 0.8)",       // Teal for Prol nodes  
-            "Term": "rgba(69, 183, 209, 0.8)",       // Blue for Term nodes
-            "Constant": "rgba(100, 200, 100, 0.8)",  // Green for Constant nodes
-            "Hole": "transparent",                   // Transparent for Hole nodes
-            "Prepare": "rgba(255, 107, 107, 0.8)",
-            "Split": "rgba(254, 202, 87, 0.8)",      // Yellow for Split nodes
-            "Var": "rgba(204, 204, 204, 0.8)",       // Gray for Var nodes
-            "default": "rgba(254, 202, 87, 0.8)"     // Default yellow for unknown tags
+            "Prep": "rgba(255, 107, 107, 0.8)", "Prol": "rgba(78, 205, 196, 0.8)", 
+            "Term": "rgba(69, 183, 209, 0.8)", "Constant": "rgba(100, 200, 100, 0.8)",
+            "Hole": "transparent", "Prepare": "rgba(255, 107, 107, 0.8)",
+            "Split": "rgba(254, 202, 87, 0.8)", "Var": "rgba(204, 204, 204, 0.8)",
+            "default": "rgba(254, 202, 87, 0.8)"
         };
 
-        // Function to create tree tooltip SVG
-        function createTreeTooltipSVG(deCompressionProcess) {
-            if (!deCompressionProcess || deCompressionProcess.length === 0) return null;
+        // Shared tree parsing logic
+        function parseTreeNode(item) {
+            if (!item) return null;
+            
+            if (Array.isArray(item)) {
+                if (item.length < 1) return null;
+                const [node, children = []] = item;
+                return parseNodeObject(node, children);
+            } else if (typeof item === 'object') {
+                return parseNodeObject(item, []);
+            }
+            return null;
+        }
 
-            // Take the first tree from the deCompressionProcess
-            const ruleTree = deCompressionProcess[0];
-            if (!ruleTree || ruleTree.length < 2) return null;
+        function parseNodeObject(node, children) {
+            if (!node || Array.isArray(node)) return null;
 
-            const rootNode = ruleTree[0];
-            const rootChildren = ruleTree[1];
+            // Handle "With" nodes
+            if (node.tag === "With" && node.contents?.length >= 2) {
+                const [normalNode, withData] = node.contents;
+                const nodeInfo = extractNodeInfo(normalNode);
+                const [withString = "", withList = []] = Array.isArray(withData) ? withData : ["", []];
+                
+                const result = { ...nodeInfo, nodeType: "With", withString, withList, children: [] };
+                
+                // Parse children from both main children and withList
+                [...children, ...withList].forEach(child => {
+                    const parsed = parseTreeNode(child);
+                    if (parsed) result.children.push(parsed);
+                });
+                
+                return result;
+            }
+
+            // Handle regular nodes
+            const nodeInfo = extractNodeInfo(node);
+            const result = { ...nodeInfo, children: [] };
+            
+            children.forEach(child => {
+                const parsed = parseTreeNode(child);
+                if (parsed) result.children.push(parsed);
+            });
+            
+            return result;
+        }
+
+        function extractNodeInfo(node) {
+            const getNodeData = (tag, contents) => {
+                if (tag === "Hole") return { name: "○", tag: "Hole", nodeType: "Hole" };
+                if (tag === "Constant" && contents) {
+                    return {
+                        name: contents.contents || contents.tag || "Constant",
+                        tag: contents.tag || "Constant",
+                        nodeType: "Constant"
+                    };
+                }
+                if (tag === "Var") return { name: contents || "Var", tag: "Var", nodeType: "Var" };
+                return { name: contents || tag || "Node", tag, nodeType: tag };
+            };
+            
+            return getNodeData(node.tag, node.contents);
+        }
+
+        // Unified tree creation function
+        function createTreeSVG(deCompressionProcess, index = 0) {
+            if (!deCompressionProcess?.length || index >= deCompressionProcess.length) return null;
+            
+            const ruleTree = deCompressionProcess[index];
+            if (!ruleTree?.length || ruleTree.length < 2) return null;
+
+            const [rootNode, rootChildren] = ruleTree;
 
             function parseTree(item) {
                 if (Array.isArray(item)) {
@@ -557,6 +614,61 @@
                         const children = item.length > 1 ? item[1] : [];
 
                         if (node && typeof node === 'object' && !Array.isArray(node)) {
+                            // Handle "With" nodes specially
+                            if (node.tag === "With" && node.contents && Array.isArray(node.contents) && node.contents.length >= 2) {
+                                const normalNode = node.contents[0];
+                                const withData = node.contents[1];
+                                
+                                // Extract main node info
+                                let nodeText, nodeTag;
+                                if (normalNode.tag === "Constant" && normalNode.contents) {
+                                    nodeText = normalNode.contents.contents || normalNode.contents.tag || "Constant";
+                                    nodeTag = normalNode.contents.tag || "Constant";
+                                } else if (normalNode.tag === "Var") {
+                                    nodeText = normalNode.contents || "Var";
+                                    nodeTag = "Var";
+                                } else {
+                                    nodeText = normalNode.contents || normalNode.tag || "Node";
+                                    nodeTag = normalNode.tag;
+                                }
+                                
+                                // Extract the string and list from withData
+                                let withString = "";
+                                let withList = [];
+                                if (Array.isArray(withData) && withData.length >= 2) {
+                                    withString = withData[0] || "";
+                                    withList = withData[1] || [];
+                                }
+                                
+                                const result = {
+                                    name: nodeText,
+                                    tag: nodeTag,
+                                    nodeType: "With",
+                                    withString: withString,
+                                    withList: withList,
+                                    children: []
+                                };
+
+                                // Parse children from the main children array
+                                if (Array.isArray(children)) {
+                                    for (const child of children) {
+                                        const parsedChild = parseTree(child);
+                                        if (parsedChild) result.children.push(parsedChild);
+                                    }
+                                }
+                                
+                                // Parse children from the withList
+                                if (Array.isArray(withList)) {
+                                    for (const withChild of withList) {
+                                        const parsedWithChild = parseTree(withChild);
+                                        if (parsedWithChild) result.children.push(parsedWithChild);
+                                    }
+                                }
+                                
+                                return result;
+                            }
+                            
+                            // Handle regular nodes
                             let nodeText, nodeTag;
                             if (node.tag === "Hole") {
                                 nodeText = "○";
@@ -589,6 +701,53 @@
                         }
                     }
                 } else if (item && typeof item === 'object') {
+                    // Handle "With" nodes that are not in array format
+                    if (item.tag === "With" && item.contents && Array.isArray(item.contents) && item.contents.length >= 2) {
+                        const normalNode = item.contents[0];
+                        const withData = item.contents[1];
+                        
+                        // Extract main node info
+                        let nodeText, nodeTag;
+                        if (normalNode.tag === "Constant" && normalNode.contents) {
+                            nodeText = normalNode.contents.contents || normalNode.contents.tag || "Constant";
+                            nodeTag = normalNode.contents.tag || "Constant";
+                        } else if (normalNode.tag === "Var") {
+                            nodeText = normalNode.contents || "Var";
+                            nodeTag = "Var";
+                        } else {
+                            nodeText = normalNode.contents || normalNode.tag || "Node";
+                            nodeTag = normalNode.tag;
+                        }
+                        
+                        // Extract the string and list from withData
+                        let withString = "";
+                        let withList = [];
+                        if (Array.isArray(withData) && withData.length >= 2) {
+                            withString = withData[0] || "";
+                            withList = withData[1] || [];
+                        }
+                        
+                        const result = {
+                            name: nodeText,
+                            tag: nodeTag,
+                            nodeType: "With",
+                            withString: withString,
+                            withList: withList,
+                            children: []
+                        };
+                        
+                        // Parse children from the withList
+                        if (Array.isArray(withList)) {
+                            for (const withChild of withList) {
+                                const parsedWithChild = parseTree(withChild);
+                                if (parsedWithChild) result.children.push(parsedWithChild);
+                            }
+                        }
+                        
+                        return result;
+                    }
+                    
+                    // Handle regular object nodes
                     let nodeText, nodeTag, nodeType;
                     if (item.tag === "Hole") {
                         nodeText = "○";
@@ -756,6 +915,7 @@
             // Add background shapes with scaled dimensions and overlap prevention
             node.each(function (d) {
                 const nodeElement = d3.select(this);
+                const isWithNode = d.data.nodeType === "With";
                 const textLength = d.data.name.length;
                 
                 // Calculate available space based on tree width and number of leaves at this level
@@ -776,7 +936,10 @@
                 // Apply overall scale factor
                 const finalFontSize = Math.max(6, adjustedFontSize * scale);
                 const finalNodeWidth = Math.min(nodeWidth * scale, maxNodeWidth);
-                const finalNodeHeight = Math.max(finalFontSize * 1.4 + 6, finalFontSize + 4);
+                // Make "With" nodes taller to accommodate multiple lines
+                const finalNodeHeight = isWithNode ? 
+                    Math.max(finalFontSize * 3 + 8, finalFontSize * 2 + 6) : 
+                    Math.max(finalFontSize * 1.4 + 6, finalFontSize + 4);
 
                 if (d.data.nodeType !== "Hole") {
                     nodeElement.append("rect")
@@ -796,36 +959,87 @@
                 // Store the final font size for text rendering
                 d._finalFontSize = finalFontSize;
                 d._finalNodeWidth = finalNodeWidth;
+                d._finalNodeHeight = finalNodeHeight;
                 d._adjustedFontSize = adjustedFontSize;
             });
 
-            // Add text labels with dynamically scaled font and smart truncation
-            node.append("text")
-                .attr("text-anchor", "middle")
-                .attr("dy", "0.35em")
-                .style("font-family", "monospace")
-                .style("font-size", d => `${d._finalFontSize}px`)
-                .style("fill", "white")
-                .style("font-weight", "bold")
-                .style("text-shadow", "1px 1px 2px rgba(0,0,0,0.8)")
-                .text(d => {
+            // Add text labels with dynamically scaled font and smart truncation for "With" nodes
+            node.each(function(d) {
+                const nodeElement = d3.select(this);
+                const isWithNode = d.data.nodeType === "With";
+                
+                if (isWithNode) {
+                    // For "With" nodes, display three components: main text, withString, withList count
+                    const mainText = d.data.name;
+                    const withString = d.data.withString || "";
+                    const withListCount = (d.data.withList && Array.isArray(d.data.withList)) ? d.data.withList.length : 0;
+                    
+                    // Main node text (top line)
+                    nodeElement.append("text")
+                        .attr("text-anchor", "middle")
+                        .attr("dy", "-0.5em")
+                        .style("font-family", "monospace")
+                        .style("font-size", `${d._finalFontSize}px`)
+                        .style("fill", "white")
+                        .style("font-weight", "bold")
+                        .style("text-shadow", "1px 1px 2px rgba(0,0,0,0.8)")
+                        .text(mainText);
+                    
+                    // With string (middle line, yellow)
+                    if (withString) {
+                        nodeElement.append("text")
+                            .attr("text-anchor", "middle")
+                            .attr("dy", "0.35em")
+                            .style("font-family", "monospace")
+                            .style("font-size", `${Math.max(6, d._finalFontSize * 0.8)}px`)
+                            .style("fill", "#FFD700")
+                            .style("font-weight", "bold")
+                            .style("text-shadow", "1px 1px 2px rgba(0,0,0,0.8)")
+                            .text(withString);
+                    }
+                    
+                    // With list count (bottom line, light blue)
+                    if (withListCount > 0) {
+                        nodeElement.append("text")
+                            .attr("text-anchor", "middle")
+                            .attr("dy", "1.2em")
+                            .style("font-family", "monospace")
+                            .style("font-size", `${Math.max(6, d._finalFontSize * 0.7)}px`)
+                            .style("fill", "#87CEEB")
+                            .style("font-weight", "bold")
+                            .style("text-shadow", "1px 1px 2px rgba(0,0,0,0.8)")
+                            .text(`[${withListCount}]`);
+                    }
+                } else {
+                    // For regular nodes, use single-line text
                     const text = d.data.name;
                     const maxWidth = d._finalNodeWidth - 8; // Padding inside node
                     const charWidth = d._finalFontSize * 0.6;
                     const maxChars = Math.floor(maxWidth / charWidth);
                     
+                    let displayText = text;
                     // Truncate text if needed
                     if (text.length > maxChars && maxChars > 3) {
                         if (maxChars <= 6) {
                             // Very small space - just show first few chars
-                            return text.substring(0, maxChars);
+                            displayText = text.substring(0, maxChars);
                         } else {
                             // Enough space for ellipsis
-                            return text.substring(0, maxChars - 3) + "...";
+                            displayText = text.substring(0, maxChars - 3) + "...";
                         }
                     }
-                    return text;
-                });
+                    
+                    nodeElement.append("text")
+                        .attr("text-anchor", "middle")
+                        .attr("dy", "0.35em")
+                        .style("font-family", "monospace")
+                        .style("font-size", `${d._finalFontSize}px`)
+                        .style("fill", "white")
+                        .style("font-weight", "bold")
+                        .style("text-shadow", "1px 1px 2px rgba(0,0,0,0.8)")
+                        .text(displayText);
+                }
+            });
 
             return treeSvg.node();
         }
@@ -1114,6 +1328,61 @@
                         const children = item.length > 1 ? item[1] : [];
 
                         if (node && typeof node === 'object' && !Array.isArray(node)) {
+                            // Handle "With" nodes specially
+                            if (node.tag === "With" && node.contents && Array.isArray(node.contents) && node.contents.length >= 2) {
+                                const normalNode = node.contents[0];
+                                const withData = node.contents[1];
+                                
+                                // Extract main node info
+                                let nodeText, nodeTag;
+                                if (normalNode.tag === "Constant" && normalNode.contents) {
+                                    nodeText = normalNode.contents.contents || normalNode.contents.tag || "Constant";
+                                    nodeTag = normalNode.contents.tag || "Constant";
+                                } else if (normalNode.tag === "Var") {
+                                    nodeText = normalNode.contents || "Var";
+                                    nodeTag = "Var";
+                                } else {
+                                    nodeText = normalNode.contents || normalNode.tag || "Node";
+                                    nodeTag = normalNode.tag;
+                                }
+                                
+                                // Extract the string and list from withData
+                                let withString = "";
+                                let withList = [];
+                                if (Array.isArray(withData) && withData.length >= 2) {
+                                    withString = withData[0] || "";
+                                    withList = withData[1] || [];
+                                }
+                                
+                                const result = {
+                                    name: nodeText,
+                                    tag: nodeTag,
+                                    nodeType: "With",
+                                    withString: withString,
+                                    withList: withList,
+                                    children: []
+                                };
+
+                                // Parse children from the main children array
+                                if (Array.isArray(children)) {
+                                    for (const child of children) {
+                                        const parsedChild = parseTree(child);
+                                        if (parsedChild) result.children.push(parsedChild);
+                                    }
+                                }
+                                
+                                // Parse children from the withList
+                                if (Array.isArray(withList)) {
+                                    for (const withChild of withList) {
+                                        const parsedWithChild = parseTree(withChild);
+                                        if (parsedWithChild) result.children.push(parsedWithChild);
+                                    }
+                                }
+                                
+                                return result;
+                            }
+                            
+                            // Handle regular nodes
                             let nodeText, nodeTag;
                             if (node.tag === "Hole") {
                                 nodeText = "○";
@@ -1146,6 +1415,53 @@
                         }
                     }
                 } else if (item && typeof item === 'object') {
+                    // Handle "With" nodes that are not in array format
+                    if (item.tag === "With" && item.contents && Array.isArray(item.contents) && item.contents.length >= 2) {
+                        const normalNode = item.contents[0];
+                        const withData = item.contents[1];
+                        
+                        // Extract main node info
+                        let nodeText, nodeTag;
+                        if (normalNode.tag === "Constant" && normalNode.contents) {
+                            nodeText = normalNode.contents.contents || normalNode.contents.tag || "Constant";
+                            nodeTag = normalNode.contents.tag || "Constant";
+                        } else if (normalNode.tag === "Var") {
+                            nodeText = normalNode.contents || "Var";
+                            nodeTag = "Var";
+                        } else {
+                            nodeText = normalNode.contents || normalNode.tag || "Node";
+                            nodeTag = normalNode.tag;
+                        }
+                        
+                        // Extract the string and list from withData
+                        let withString = "";
+                        let withList = [];
+                        if (Array.isArray(withData) && withData.length >= 2) {
+                            withString = withData[0] || "";
+                            withList = withData[1] || [];
+                        }
+                        
+                        const result = {
+                            name: nodeText,
+                            tag: nodeTag,
+                            nodeType: "With",
+                            withString: withString,
+                            withList: withList,
+                            children: []
+                        };
+                        
+                        // Parse children from the withList
+                        if (Array.isArray(withList)) {
+                            for (const withChild of withList) {
+                                const parsedWithChild = parseTree(withChild);
+                                if (parsedWithChild) result.children.push(parsedWithChild);
+                            }
+                        }
+                        
+                        return result;
+                    }
+                    
+                    // Handle regular object nodes
                     let nodeText, nodeTag, nodeType;
                     if (item.tag === "Hole") {
                         nodeText = "○";
@@ -1313,6 +1629,7 @@
             // Add background shapes with scaled dimensions and overlap prevention
             node.each(function (d) {
                 const nodeElement = d3.select(this);
+                const isWithNode = d.data.nodeType === "With";
                 const textLength = d.data.name.length;
                 
                 // Calculate available space based on tree width and number of leaves at this level
@@ -1333,7 +1650,10 @@
                 // Apply overall scale factor
                 const finalFontSize = Math.max(6, adjustedFontSize * scale);
                 const finalNodeWidth = Math.min(nodeWidth * scale, maxNodeWidth);
-                const finalNodeHeight = Math.max(finalFontSize * 1.4 + 6, finalFontSize + 4);
+                // Make "With" nodes taller to accommodate multiple lines
+                const finalNodeHeight = isWithNode ? 
+                    Math.max(finalFontSize * 3 + 8, finalFontSize * 2 + 6) : 
+                    Math.max(finalFontSize * 1.4 + 6, finalFontSize + 4);
 
                 if (d.data.nodeType !== "Hole") {
                     nodeElement.append("rect")
@@ -1353,36 +1673,87 @@
                 // Store the final font size for text rendering
                 d._finalFontSize = finalFontSize;
                 d._finalNodeWidth = finalNodeWidth;
+                d._finalNodeHeight = finalNodeHeight;
                 d._adjustedFontSize = adjustedFontSize;
             });
 
-            // Add text labels with dynamically scaled font and smart truncation
-            node.append("text")
-                .attr("text-anchor", "middle")
-                .attr("dy", "0.35em")
-                .style("font-family", "monospace")
-                .style("font-size", d => `${d._finalFontSize}px`)
-                .style("fill", "white")
-                .style("font-weight", "bold")
-                .style("text-shadow", "1px 1px 2px rgba(0,0,0,0.8)")
-                .text(d => {
+            // Add text labels with dynamically scaled font and smart truncation for "With" nodes
+            node.each(function(d) {
+                const nodeElement = d3.select(this);
+                const isWithNode = d.data.nodeType === "With";
+                
+                if (isWithNode) {
+                    // For "With" nodes, display three components: main text, withString, withList count
+                    const mainText = d.data.name;
+                    const withString = d.data.withString || "";
+                    const withListCount = (d.data.withList && Array.isArray(d.data.withList)) ? d.data.withList.length : 0;
+                    
+                    // Main node text (top line)
+                    nodeElement.append("text")
+                        .attr("text-anchor", "middle")
+                        .attr("dy", "-0.5em")
+                        .style("font-family", "monospace")
+                        .style("font-size", `${d._finalFontSize}px`)
+                        .style("fill", "white")
+                        .style("font-weight", "bold")
+                        .style("text-shadow", "1px 1px 2px rgba(0,0,0,0.8)")
+                        .text(mainText);
+                    
+                    // With string (middle line, yellow)
+                    if (withString) {
+                        nodeElement.append("text")
+                            .attr("text-anchor", "middle")
+                            .attr("dy", "0.35em")
+                            .style("font-family", "monospace")
+                            .style("font-size", `${Math.max(6, d._finalFontSize * 0.8)}px`)
+                            .style("fill", "#FFD700")
+                            .style("font-weight", "bold")
+                            .style("text-shadow", "1px 1px 2px rgba(0,0,0,0.8)")
+                            .text(withString);
+                    }
+                    
+                    // With list count (bottom line, light blue)
+                    if (withListCount > 0) {
+                        nodeElement.append("text")
+                            .attr("text-anchor", "middle")
+                            .attr("dy", "1.2em")
+                            .style("font-family", "monospace")
+                            .style("font-size", `${Math.max(6, d._finalFontSize * 0.7)}px`)
+                            .style("fill", "#87CEEB")
+                            .style("font-weight", "bold")
+                            .style("text-shadow", "1px 1px 2px rgba(0,0,0,0.8)")
+                            .text(`[${withListCount}]`);
+                    }
+                } else {
+                    // For regular nodes, use single-line text
                     const text = d.data.name;
                     const maxWidth = d._finalNodeWidth - 8; // Padding inside node
                     const charWidth = d._finalFontSize * 0.6;
                     const maxChars = Math.floor(maxWidth / charWidth);
                     
+                    let displayText = text;
                     // Truncate text if needed
                     if (text.length > maxChars && maxChars > 3) {
                         if (maxChars <= 6) {
                             // Very small space - just show first few chars
-                            return text.substring(0, maxChars);
+                            displayText = text.substring(0, maxChars);
                         } else {
                             // Enough space for ellipsis
-                            return text.substring(0, maxChars - 3) + "...";
+                            displayText = text.substring(0, maxChars - 3) + "...";
                         }
                     }
-                    return text;
-                });
+                    
+                    nodeElement.append("text")
+                        .attr("text-anchor", "middle")
+                        .attr("dy", "0.35em")
+                        .style("font-family", "monospace")
+                        .style("font-size", `${d._finalFontSize}px`)
+                        .style("fill", "white")
+                        .style("font-weight", "bold")
+                        .style("text-shadow", "1px 1px 2px rgba(0,0,0,0.8)")
+                        .text(displayText);
+                }
+            });
 
             return treeSvg.node();
         }

@@ -3,24 +3,26 @@
 module Compression.SLFP where
 
 import Compression.Meta (Meta, RepSymbol (..), inferMeta, useMeta)
-import Compression.TreeUtils (Location (..), applyAt, findSlots, (<:))
+import Compression.TreeUtils (Location (..), applyAt, fillHoles, findSlots, (<:))
 import Control.Applicative (asum)
+import Data.Aeson
 import Data.Foldable (Foldable (toList))
 import Data.Function (on)
+import Data.Functor.Base (TreeF (..))
+import Data.Functor.Foldable
 import Data.List hiding (transpose)
 import Data.List.Split (splitPlacesBlanks)
 import qualified Data.Map as Map
 import Data.Maybe
 import Data.Monoid (Sum (getSum))
+import Data.Set (Set)
+import qualified Data.Set as Set
 import Data.Tree (Tree (..))
-import Safe (maximumByMay)
-import Text.Printf (PrintfType, printf)
 import GHC.Generics (Generic)
-import Data.Aeson
 import Prettyprinter (Pretty (..), (<+>))
 import qualified Prettyprinter as Pretty
-import qualified Data.Set as Set
-import Data.Set (Set)
+import Safe (maximumByMay)
+import Text.Printf (PrintfType, printf)
 
 {- | Accumulated results of applying a list of f :: a->a  on a initial value.
 The output list is finite if we can reach a fixpoint of f.
@@ -50,57 +52,57 @@ matchR m (Node x ts) = m == inferMeta x (rootLabel <$> ts)
 
 data Pattern a
   = Comp Int a a
-  deriving (Show, Eq, Ord,Generic)
+  | TreePattern (Tree a)
+  deriving (Show, Eq, Ord, Generic)
 
-instance (FromJSON a) =>  FromJSON (Pattern a)
-instance (ToJSON a) =>  ToJSON (Pattern a)
+instance (FromJSON a) => FromJSON (Pattern a)
+instance (ToJSON a) => ToJSON (Pattern a)
 
 data Abstraction a
   = Constant a
   | Var String
   | (Abstraction a) `With` (String, [Abstraction a])
   | Hole
-  deriving (Show, Eq, Ord,Generic)
+  deriving (Show, Eq, Ord, Generic)
 
-instance (FromJSON a) =>  FromJSON (Abstraction a)
-instance (ToJSON a) =>  ToJSON (Abstraction a)
-instance (ToJSON a) => ToJSONKey (Abstraction a) 
-instance (FromJSON a) => FromJSONKey (Abstraction a) 
+instance (FromJSON a) => FromJSON (Abstraction a)
+instance (ToJSON a) => ToJSON (Abstraction a)
+instance (ToJSON a) => ToJSONKey (Abstraction a)
+instance (FromJSON a) => FromJSONKey (Abstraction a)
 
-
-instance Pretty a => Pretty (Abstraction a) where
+instance (Pretty a) => Pretty (Abstraction a) where
   pretty (Hole) = "◯"
-  pretty  (Constant x) = pretty x
-  pretty (Var x) = pretty x 
-  pretty (x `With` (s,xs)) = pretty x <+> "{" <> pretty s <> "}"<+> 
-    Pretty.hsep (pretty <$> xs)
+  pretty (Constant x) = pretty x
+  pretty (Var x) = pretty x
+  pretty (x `With` (s, xs)) =
+    pretty x <+> "{"
+      <> pretty s
+      <> "}"
+        <+> Pretty.hsep (pretty <$> xs)
 
 instance Size (Abstraction a) where
   size = \case
     Constant _ -> 1
     Var _ -> 1
     _ `With` (_, xs) -> 2 + length xs
-    Hole  -> 0
-
+    Hole -> 0
 
 getVariables :: Abstraction a -> Set String
-getVariables = \case 
-  Constant _ -> mempty 
+getVariables = \case
+  Constant _ -> mempty
   Hole -> mempty
-  Var x -> Set.singleton x 
-  x `With` (_,ys) -> foldMap getVariables (x:ys)
+  Var x -> Set.singleton x
+  x `With` (_, ys) -> foldMap getVariables (x : ys)
 
-getPatternOrRules :: _ => Abstraction r -> Set (Either r String)
+getPatternOrRules :: (_) => Abstraction r -> Set (Either r String)
 getPatternOrRules = \case
   Constant x -> Set.singleton $ Left x
   Var x -> Set.singleton $ Right x
-  x `With` (_, ys) -> foldMap getPatternOrRules (x:ys)
+  x `With` (_, ys) -> foldMap getPatternOrRules (x : ys)
   Hole -> mempty
 
 class a `CachedBy` b where
   retrieve :: Map.Map b a
-
-
 
 getMeta :: (Eq a) => Tree a -> Meta
 getMeta t = inferMeta (rootLabel t) (rootLabel <$> subForest t)
@@ -120,7 +122,7 @@ rRewriteAll ::
   Tree (Abstraction a)
 rRewriteAll e = applyPostOrder (rRewriteTop e)
 
-pSubstituteAll :: Int -> Pattern a -> Tree a -> [Location] -> Tree a
+pSubstituteAll :: (_) => Int -> Pattern (Abstraction a) -> Tree (Abstraction a) -> [Location] -> Tree (Abstraction a)
 pSubstituteAll n e = applyPostOrder (pSubstitutionTop n e)
 
 rSubstituteAll :: (Abstraction a, [Int], Meta) -> Tree (Abstraction a) -> [Location] -> Tree (Abstraction a)
@@ -156,8 +158,12 @@ pRewriteTop :: (a, Pattern a) -> Tree a -> Tree a
 pRewriteTop (x, Comp i _ _) (Node _ ts) = Node x $ take (i - 1) ts ++ subForest (ts !! (i - 1)) ++ drop i ts
 
 -- | inverse of pRewriteTop.
-pSubstitutionTop :: Int -> Pattern a -> Tree a -> Tree a
+pSubstitutionTop :: (_) => Int -> Pattern (Abstraction a) -> Tree (Abstraction a) -> Tree (Abstraction a)
 pSubstitutionTop n (Comp i r y) (Node _ ts) = Node r $ take (i - 1) ts ++ [Node y (take n . drop (i - 1) $ ts)] ++ drop (i + n - 1) ts
+pSubstitutionTop n (TreePattern t) y@(Node _ ts)
+  = fillHoles (== Hole) t ts
+  -- | length ts == n = fillHoles (== Hole) t ts
+  -- | otherwise = error $ "error in pSubstitutionTop: arity not matching arguments " <> show (n,t, y)
 
 -- | Given a tree transformation function, a list of locations in post order, apply the transformation to all location in the tree
 applyPostOrder :: (Tree a -> Tree a) -> Tree a -> [Location] -> Tree a
@@ -224,7 +230,7 @@ data SLTP a = SLTP
   , patterns :: Map.Map String (Pattern (Abstraction a))
   , metas :: Map.Map String Meta
   }
-  deriving (Show, Eq,Generic)
+  deriving (Show, Eq, Generic)
 
 instance (ToJSON a, ToJSONKey a) => ToJSON (SLTP a)
 instance (FromJSON a, FromJSONKey a) => FromJSON (SLTP a)
@@ -306,7 +312,10 @@ instance Compressor Meta where
 instance Compressor (Pattern a) where
   unitSave = const 1
 
-evaluateAbstraction :: (Compressor a, Foldable t) => Map.Map a (t b, Bool) -> Map.Map a (t b, Int)
+evaluateAbstraction ::
+  (Compressor a, Foldable t) =>
+  Map.Map a (t b, Bool) ->
+  Map.Map a (t b, Int)
 evaluateAbstraction = Map.mapWithKey (\x (locs, stored) -> (locs, totalSave x (length locs) stored))
 
 evaluateAbstractionG :: (Compressor a, Foldable t, _) => Map.Map a (Map.Map k (t b), Bool) -> Map.Map a (Map.Map k (t b), Int)
@@ -315,7 +324,10 @@ evaluateAbstractionG = Map.mapWithKey (\x (locs, stored) -> (locs, totalSave x (
 bestAbstractionL :: (Compressor a, Foldable t) => Map.Map a (t b, Bool) -> Maybe (a, (t b, Int))
 bestAbstractionL d = maximumByMay (compare `on` \(_, (_, x)) -> x) . Map.toList $ evaluateAbstraction d
 
-bestAbstractionG :: (Compressor a, Foldable t, _) => Map.Map a (Map.Map k (t b), Bool) -> Maybe (a, (Map.Map k (t b), Int))
+bestAbstractionG ::
+  (Compressor a, Foldable t, _) =>
+  Map.Map a (Map.Map k (t b), Bool) ->
+  Maybe (a, (Map.Map k (t b), Int))
 bestAbstractionG d =
   maximumByMay (compare `on` \(_, (_, x)) -> x)
     . filter (\(_, (x, _)) -> Map.size x > 1)
@@ -341,11 +353,10 @@ data SLFP a b = SLFP
   , globalMetas :: Map.Map String Meta
   , arities :: Map.Map (Abstraction a) Int
   }
-  deriving (Show, Eq,Generic)
+  deriving (Show, Eq, Generic)
 
-instance (ToJSON a,ToJSONKey a, ToJSON b,ToJSONKey b,ToJSONKey (Abstraction a)) => ToJSON (SLFP a b)
-instance (Ord a, Ord b,FromJSON a,FromJSONKey b,FromJSONKey a) => FromJSON (SLFP a b)
-
+instance (ToJSON a, ToJSONKey a, ToJSON b, ToJSONKey b, ToJSONKey (Abstraction a)) => ToJSON (SLFP a b)
+instance (Ord a, Ord b, FromJSON a, FromJSONKey b, FromJSONKey a) => FromJSON (SLFP a b)
 
 initSLFP :: (_) => [(b, Tree a)] -> SLFP a b
 initSLFP nts =
@@ -358,8 +369,15 @@ initSLFP nts =
 localMetas :: (_) => SLFP a b -> Map.Map String Meta
 localMetas slfp = foldMap metas (sltps slfp)
 
-globalOcc :: (Ord k1, Ord k2) => (Tree (Abstraction a1) -> Map.Map k2 a2) -> Map.Map k1 (SLTP a1) -> Map.Map k2 (Map.Map k1 a2)
-globalOcc f dE = transpose $ f . compressedTree <$> dE
+globalOcc ::
+  (Ord pc, Ord pat) =>
+  -- | a tree pattern locator, extract a collection of patterns and their occurances (locations) in a tree
+  (Tree (Abstraction a) -> Map.Map pat loc) ->
+  -- | an indexed collection of trees
+  Map.Map pc (Tree (Abstraction a)) ->
+  -- | collection of patterns with their piecewise occurances (locations)
+  Map.Map pat (Map.Map pc loc)
+globalOcc f dE = transpose $ f <$> dE
 
 alterTree :: (Tree (Abstraction a) -> Tree (Abstraction a)) -> SLTP a -> SLTP a
 alterTree f (SLTP t dP dM) = SLTP (f t) dP dM
@@ -393,12 +411,13 @@ compressG g@(SLFP dE dpG drG dA) = case (mp, mr) of
   (Nothing, Nothing) -> compressLocally g
   (Just (p, (plocs, savP)), Nothing) -> compressByP p plocs
   (Nothing, Just (r, (rlocs, savR))) -> compressByR r rlocs
-  (Just (p, (plocs, savP)), Just (r, (rlocs, savR)))
-    
-    | savP > savR -> compressByP p plocs
-    | otherwise -> compressByR r rlocs
+  (Just (p, (plocs, savP)), Just (r, (rlocs, savR))) ->
+    compressByP p plocs
  where
---   -- compressByP p plocs -- just an idea: do p rewrite when possible to make more oppotunity of r-rewrite on large pattern
+  -- \| savP > savR -> compressByP p plocs
+  -- \| otherwise -> compressByR r rlocs
+
+  -- compressByP p plocs -- just an idea: do p rewrite when possible to make more oppotunity of r-rewrite on large pattern
 
   compressLocally (SLFP x y z a) =
     SLFP
@@ -418,21 +437,21 @@ compressG g@(SLFP dE dpG drG dA) = case (mp, mr) of
       dpG
       (insertWhenNotElement r drG $ nameR r)
       dA
-  mp = bestAbstractionG (Map.mapWithKey (\k v -> (v, k `elem` dpG)) (globalOcc occP dE))
-  mr = bestAbstractionG (Map.mapWithKey (\k v -> (v, k `elem` drG)) (globalOcc occR dE))
+  mp = bestAbstractionG (Map.mapWithKey (\k v -> (v, k `elem` dpG)) (globalOcc occP $ compressedTree <$> dE))
+  mr = bestAbstractionG (Map.mapWithKey (\k v -> (v, k `elem` drG)) (globalOcc occR $ compressedTree <$> dE))
   nameP p = if p `elem` dpG then lookupByValue p dpG else freshSymbol "PG" dE dpG drG
   nameR r = if r `elem` drG then lookupByValue r drG else freshSymbol "RG" dE dpG drG
 
-compressGSteps :: (Ord b,_) => SLFP r b -> [SLFP r b]
+compressGSteps :: (Ord b, _) => SLFP r b -> [SLFP r b]
 compressGSteps slfp = iterateFs [compressG | _ <- [0 ..]] slfp
 
 deCompressG :: (_) => SLFP a b -> SLFP a b
-deCompressG g@(SLFP dE dpG drG dA) = SLFP dE' dpG drG dA
+deCompressG g@(SLFP dE dpG drG dA) = g{sltps = dE'}
  where
   dE' = deCompressL dpG drG dA <$> dE
 
 deCompressL ::
-  (Ord a) =>
+  (Ord a, _) =>
   Map.Map String (Pattern (Abstraction a)) ->
   Map.Map String Meta ->
   Map.Map (Abstraction a) Int ->
@@ -442,36 +461,44 @@ deCompressL dpG drG dA (SLTP t dP dM) = SLTP t' dP dM
  where
   t' = deCompressTree ((dpG <> dP) Map.!) ((drG <> dM) Map.!) (dA Map.!) t
 
+debugLookup :: (Ord k, Show k, Show a) => Map.Map k a -> k -> a
+debugLookup d k = case Map.lookup k d of
+  Nothing -> error $ "(debugLookUp) key not found: " <> show k
+  Just v -> v
+
 deCompressTree ::
-  (Ord a) =>
+  (Ord a, _) =>
   (String -> Pattern (Abstraction a)) ->
   (String -> Meta) ->
   (Abstraction a -> Int) ->
   Tree (Abstraction a) ->
   Tree (Abstraction a)
 deCompressTree dP dM dA t@(Node r ts) = case r of
-  s@(Constant x) -> Node s (deCompressTree dP dM dA <$> ts)
-  s@(Var x) ->
-    pSubstituteAll
-      (inferArity dP dM dA y)
-      (dP x)
-      t
-      (findSlots (== s) t)
+  Constant{} -> Node r (deCompressTree dP dM dA <$> ts)
+  Var x -> pSubstituteAll n pat t (findSlots (== r) t)
    where
-    (Comp _ _ y) = dP x
-  s@(x `With` (m, as)) ->
+    pat = dP x
+    n = case pat of
+      Comp _ _ y -> inferArity dP dM dA y
+      TreePattern t' -> numHoles t'
+  x `With` (m, as) ->
+    -- \| temporary disable to locate branching hole error (which is caused by rSubstituteAll)
     rSubstituteAll
-      (s, groupings, meta)
+      (r, groupings, meta)
       t
-      (findSlots (== s) t)
+      (findSlots (== r) t)
    where
     groupings = inferArity dP dM dA <$> useMeta meta x as
     meta = dM m
-  s@Hole -> case ts of 
-      [] -> t
-      _ -> error "deCompressTree: Hole found in the branching node, this should not happen"
+  Hole -> case ts of
+    [] -> t
+    _ -> error $ "deCompressTree: Hole found in the branching node, this should not happen. The problematic tree is " <> show t
 
-
+numHoles :: Tree (Abstraction a) -> Int
+numHoles = cata $ \case
+  NodeF Hole [] -> 1
+  NodeF _ [] -> 0
+  NodeF _ ns -> sum ns
 
 inferArity ::
   (String -> Pattern (Abstraction a)) ->
@@ -481,10 +508,11 @@ inferArity ::
   Int
 inferArity d dMeta dA a = case a of
   Constant x -> dA (Constant x)
-  Var x -> inferArity d dMeta dA l + inferArity d dMeta dA r - 1
-   where
-    (Comp _ l r) = d x
+  Var x -> case d x of
+    Comp _ l r -> inferArity d dMeta dA l + inferArity d dMeta dA r - 1
+    TreePattern t -> numHoles t
   a' `With` (m, as) -> sum (inferArity d dMeta dA <$> useMeta (dMeta m) a' as)
+  Hole -> 1
 
 symbolToExpandTop :: Abstraction a -> Maybe (Abstraction a)
 symbolToExpandTop a = case a of
@@ -496,5 +524,3 @@ symbolToExpand t = asum (symbolToExpandTop <$> t)
 
 -- >>> asum (Node (Just 'a') [Node (Just 'b') [],Node (Just 'c') []])
 -- Just 'a'
-
-

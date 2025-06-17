@@ -6,14 +6,19 @@ import Data.Aeson
 import GHC.Generics hiding (Meta)
 
 
-data RepSymbol = New | Star | RepLoc Int deriving (Eq, Ord, Generic)
+data RepSymbol = New | Star | RepLoc Int deriving (Eq, Ord, Generic,Show,Read)
 instance ToJSON RepSymbol
 instance FromJSON RepSymbol
 
-instance Show RepSymbol where
-  show New = "_"
-  show Star = "★"
-  show (RepLoc n) = show n
+
+
+-- >>> read "[New,RepLoc 0]" :: Meta
+-- [New,RepLoc 0]
+
+-- instance Show RepSymbol where
+--   show New = "_"
+--   show Star = "★"
+--   show (RepLoc n) = show n
 type Meta = [RepSymbol]
 
 useMeta' :: Meta -> a -> [a] -> [a] -> [a]

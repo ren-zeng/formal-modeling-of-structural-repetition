@@ -1,0 +1,1082 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{title}}</title>
+    <script src="https://d3js.org/d3.v7.min.js"></script>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background-color: white;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+        }
+        
+        .header {
+            color: grey;
+            font: 13px/25.5px var(--sans-serif);
+            text-transform: uppercase;
+            margin-bottom: 20px;
+        }
+        
+        h1 {
+            font-size: 2em;
+            margin-bottom: 10px;
+            color: #333;
+        }
+        
+        .description {
+            margin-bottom: 30px;
+            color: #666;
+            line-height: 1.6;
+        }
+        
+        .visualization-container {
+            display: flex;
+            gap: 20px;
+            min-height: 600px;
+            flex-direction: row; /* Side by side on wide screens */
+        }
+        
+        #chart-container {
+            flex: 1;
+            width: 50%; /* Exactly half the screen */
+            display: flex;
+            justify-content: flex-start;
+            align-items: flex-start;
+            min-height: 600px;
+            min-width: 0; /* Allow shrinking */
+            padding: 10px;
+        }
+        
+        #info-panel {
+            flex: 1;
+            width: 50%; /* Exactly half the screen */
+            background-color: #fafafa;
+            border: none;
+            border-radius: 8px;
+            padding: 20px;
+            overflow-y: auto;
+            max-height: 600px;
+            flex-shrink: 0; /* Don't shrink the info panel */
+            box-shadow: 0 1px 3px rgba(0,0,0,0.04);
+        }
+        
+        .info-panel-header {
+            font-size: 12px;
+            font-weight: 500;
+            color: #6b7280;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            margin-bottom: 16px;
+        }
+        
+        .node-details {
+            background: none;
+            padding: 0;
+            border-radius: 0;
+            margin-bottom: 20px;
+            box-shadow: none;
+            border-bottom: 1px solid #e5e7eb;
+            padding-bottom: 16px;
+        }
+        
+        .node-details h3 {
+            margin: 0 0 12px 0;
+            color: #111827;
+            font-size: 18px;
+            font-weight: 600;
+            letter-spacing: -0.025em;
+        }
+        
+        .detail-item {
+            margin: 5px 0;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 4px 0;
+        }
+        
+        .detail-label {
+            font-weight: 500;
+            color: #6b7280;
+            font-size: 13px;
+        }
+        
+        .detail-value {
+            color: #666;
+        }
+        
+        #tree-display {
+            background: rgba(0, 0, 0, 0.9);
+            border-radius: 5px;
+            padding: 10px;
+            margin-top: 15px;
+            min-height: 200px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+        
+        .no-selection {
+            text-align: center;
+            color: #999;
+            font-style: italic;
+            padding: 40px 20px;
+        }
+        
+        .tree-tooltip {
+            box-shadow: 0 4px 20px rgba(0,0,0,0.3);
+            border: 1px solid #333;
+        }
+        
+        .loading {
+            text-align: center;
+            padding: 50px;
+            color: #999;
+        }
+        
+        .error {
+            color: #d32f2f;
+            background-color: #ffebee;
+            padding: 15px;
+            border-radius: 4px;
+            margin: 20px 0;
+        }
+
+        #chart-container svg {
+            width: 100% !important;
+            height: auto !important;
+            max-width: none !important;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>{{title}}</h1>
+        </div>
+        
+        <div class="description">
+            {{description}}
+        </div>
+        
+        <div class="visualization-container">
+            <div id="chart-container">
+                <div class="loading">Loading visualization...</div>
+            </div>
+            <div id="info-panel">
+                <div class="info-panel-header">Node Information</div>
+                <div class="info-panel-content">
+                    <div class="no-selection">Select a node to see details</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Configuration constants
+        const CONFIG = {
+            EDGE_WIDTH: 2,
+            EDGE_WIDTH_HOVER: 3,
+            EDGE_OPACITY: 0.3,
+            EDGE_OPACITY_HOVER: 1,
+            
+            // Gradient colors
+            GRADIENT_SOURCE_COLOR: "#ff0000",
+            GRADIENT_MIDDLE_COLOR: "#f5f5f5",
+            GRADIENT_TARGET_COLOR: "#0000ff",
+            GRADIENT_MIDDLE_START: "50%",
+            GRADIENT_MIDDLE_END: "50%",
+            
+            // Level colors
+            LEVEL_COLORS: [
+                "#377eb8","#e41a1c",  "#4daf4a", "#984ea3", "#ff7f00", "#999999",
+                "#a65628", "#f781bf", "#999999", "#1f78b4", "#33a02c", "#fb9a99",
+                "#fdbf6f", "#cab2d6", "#6a3d9a", "#b15928", "#a6cee3", "#b2df8a"
+            ],
+            
+            // Colors for different states
+            COLOR_IN: "#00f",
+            COLOR_OUT: "#f00",
+            COLOR_NONE: "#ccc",
+            
+            // Chart dimensions
+            WIDTH: 800,
+            
+            // Frequency bar configuration
+            BAR_COLOR: "rgba(0, 150, 0, 0.7)",
+            BAR_COLOR_HOVER: "rgba(0, 200, 0, 0.9)",
+            BAR_WIDTH: 10, // Set to match typical font height (10px)
+            BAR_MAX_HEIGHT: 60,
+            BAR_MIN_HEIGHT: 5,
+            
+            // Tree node colors by tag
+            TREE_NODE_COLORS: {
+                "Prep": "rgba(179, 0, 255, 0.8)",      // Red for Prep nodes
+                "Prol": "rgba(255, 165, 0, 0.8)",      // Blue for Prol nodes  
+                "Term": "rgba(0, 0, 255, 0.8)",      // Blue for Term nodes
+                "Constant": "rgba(0, 0, 255, 0.8)",  // Blue for Constant nodes
+                "Hole": "transparent",               // Transparent for Hole nodes
+                "Prepare": "rgba(179, 0, 255, 0.8)",
+                "Split": "rgba(255, 165, 0, 0.8)", // Orange for Split nodes
+                "default": "rgba(0, 0, 255, 0.8)"  // Default blue for unknown tags
+            }
+        };
+
+        // Global state
+        let toggledNode = null;
+        let isToggledMode = false;
+
+        // Utility functions
+        function levelColorScale(level) {
+            return CONFIG.LEVEL_COLORS[level % CONFIG.LEVEL_COLORS.length];
+        }
+
+        function hierarchy(data) {
+            const nodeMap = new Map();
+            data.forEach(d => {
+                nodeMap.set(d.patternID, {
+                    ...d,
+                    children: [],
+                    level: -1
+                });
+            });
+
+            // Calculate dependency levels using topological sort
+            const calculateLevels = () => {
+                const visited = new Set();
+                const visiting = new Set();
+                
+                const dfs = (nodeId) => {
+                    if (visiting.has(nodeId)) {
+                        return 0;
+                    }
+                    if (visited.has(nodeId)) {
+                        return nodeMap.get(nodeId).level;
+                    }
+                    
+                    visiting.add(nodeId);
+                    const node = nodeMap.get(nodeId);
+                    
+                    if (!node.dependenciesDirect || node.dependenciesDirect.length === 0) {
+                        node.level = 0;
+                    } else {
+                        let maxDepLevel = -1;
+                        for (const depId of node.dependenciesDirect) {
+                            if (nodeMap.has(depId)) {
+                                const depLevel = dfs(depId);
+                                maxDepLevel = Math.max(maxDepLevel, depLevel);
+                            }
+                        }
+                        node.level = maxDepLevel + 1;
+                    }
+                    
+                    visiting.delete(nodeId);
+                    visited.add(nodeId);
+                    return node.level;
+                };
+                
+                nodeMap.forEach((node, nodeId) => {
+                    if (!visited.has(nodeId)) {
+                        dfs(nodeId);
+                    }
+                });
+            };
+
+            calculateLevels();
+
+            // Group nodes by level
+            const levelGroups = new Map();
+            nodeMap.forEach(node => {
+                if (!levelGroups.has(node.level)) {
+                    levelGroups.set(node.level, []);
+                }
+                levelGroups.get(node.level).push(node);
+            });
+
+            const maxLevel = Math.max(...Array.from(levelGroups.keys()));
+            
+            const createLevelNode = (level, children) => ({
+                patternID: `Level_${level}`,
+                isVirtual: true,
+                level: level,
+                children: children.sort((a, b) => a.patternID.localeCompare(b.patternID))
+            });
+
+            const root = {
+                patternID: 'Root',
+                isVirtual: true,
+                level: -1,
+                children: []
+            };
+
+            for (let level = 0; level <= maxLevel; level++) {
+                if (levelGroups.has(level)) {
+                    const levelNodes = levelGroups.get(level);
+                    const levelContainer = createLevelNode(level, levelNodes);
+                    root.children.push(levelContainer);
+                }
+            }
+
+            return root;
+        }
+
+        function bilink(root) {
+            const map = new Map(root.leaves().map(d => [d.data.patternID, d]));
+            for (const d of root.leaves()) {
+                d.incoming = [];
+                d.outgoing = [];
+                
+                if (!d.data.isVirtual && d.data.dependenciesDirect) {
+                    d.outgoing = d.data.dependenciesDirect
+                        .map(depId => [d, map.get(depId)])
+                        .filter(([source, target]) => target);
+                }
+            }
+            
+            for (const d of root.leaves()) {
+                for (const o of d.outgoing) {
+                    o[1].incoming.push(o);
+                }
+            }
+            
+            return root;
+        }
+
+        function createTreeTooltipSVG(ruleTree) {
+            if (!ruleTree || ruleTree.length < 2) return null;
+            
+            const rootNode = ruleTree[0];
+            const rootChildren = ruleTree[1];
+            
+            function parseTree(item) {
+                if (Array.isArray(item)) {
+                    if (item.length >= 1) {
+                        const node = item[0];
+                        const children = item.length > 1 ? item[1] : [];
+                        
+                        if (node && typeof node === 'object' && !Array.isArray(node)) {
+                            let nodeText, nodeTag;
+                            if (node.tag === "Hole") {
+                                nodeText = "○";
+                                nodeTag = "Hole";
+                            } else if (node.tag === "Constant" && node.contents) {
+                                nodeText = node.contents.contents || node.contents.tag || "Constant";
+                                nodeTag = node.contents.tag || "Constant";
+                            } else {
+                                nodeText = node.contents || node.tag || "Node";
+                                nodeTag = node.tag;
+                            }
+                            
+                            const result = {
+                                name: nodeText,
+                                tag: nodeTag,
+                                nodeType: node.tag,
+                                children: []
+                            };
+                            
+                            if (Array.isArray(children)) {
+                                for (const child of children) {
+                                    const parsedChild = parseTree(child);
+                                    if (parsedChild) result.children.push(parsedChild);
+                                }
+                            }
+                            return result;
+                        }
+                    }
+                } else if (item && typeof item === 'object') {
+                    let nodeText, nodeTag, nodeType;
+                    if (item.tag === "Hole") {
+                        nodeText = "○";
+                        nodeTag = "Hole";
+                        nodeType = "Hole";
+                    } else if (item.tag === "Constant" && item.contents) {
+                        nodeText = item.contents.contents || item.contents.tag || "Constant";
+                        nodeTag = item.contents.tag || "Constant";
+                        nodeType = "Constant";
+                    } else {
+                        nodeText = item.contents || item.tag || "Node";
+                        nodeTag = item.tag;
+                        nodeType = item.tag;
+                    }
+                    
+                    return {
+                        name: nodeText,
+                        tag: nodeTag,
+                        nodeType: nodeType,
+                        children: []
+                    };
+                }
+                return null;
+            }
+            
+            let treeData;
+            if (rootNode.tag === "Hole") {
+                treeData = {
+                    name: "○",
+                    tag: "Hole",
+                    nodeType: "Hole",
+                    children: []
+                };
+            } else if (rootNode.tag === "Constant" && rootNode.contents) {
+                treeData = {
+                    name: rootNode.contents.contents || rootNode.contents.tag || "Constant",
+                    tag: rootNode.contents.tag || "Constant",
+                    nodeType: "Constant",
+                    children: []
+                };
+            } else {
+                treeData = {
+                    name: rootNode.contents || rootNode.tag || "Root",
+                    tag: rootNode.tag,
+                    nodeType: rootNode.tag,
+                    children: []
+                };
+            }
+            
+            if (Array.isArray(rootChildren)) {
+                for (const child of rootChildren) {
+                    const parsedChild = parseTree(child);
+                    if (parsedChild) treeData.children.push(parsedChild);
+                }
+            }
+            
+            function calculateTreeDimensions(root) {
+                const hierarchy = d3.hierarchy(root);
+                const maxDepth = hierarchy.height;
+                const leaves = hierarchy.leaves().length;
+                
+                // Get the actual available space in the info panel
+                const infoPanel = document.getElementById('info-panel');
+                const availableWidth = infoPanel ? infoPanel.clientWidth - 60 : 340; // More padding for margins
+                const maxHeight = 250; // Reduced max height to leave room for scaling
+                
+                const minWidth = 180;
+                const minHeight = 120;
+                
+                // Scale down node spacing significantly to prevent overlaps
+                const baseNodeWidth = Math.max(40, Math.min(60, availableWidth / Math.max(leaves, 3)));
+                const baseNodeHeight = Math.max(35, Math.min(45, maxHeight / Math.max(maxDepth + 1, 2)));
+                
+                // Calculate dimensions with better scaling
+                const calculatedWidth = Math.max(minWidth, Math.min(leaves * baseNodeWidth, availableWidth));
+                const calculatedHeight = Math.max(minHeight, Math.min((maxDepth + 1) * baseNodeHeight + 60, maxHeight));
+                
+                return {
+                    width: calculatedWidth,
+                    height: calculatedHeight,
+                    maxDepth,
+                    nodeWidth: baseNodeWidth,
+                    nodeHeight: baseNodeHeight
+                };
+            }
+            
+            const dimensions = calculateTreeDimensions(treeData);
+            const treeWidth = dimensions.width;
+            const treeHeight = dimensions.height;
+            const hierarchy = d3.hierarchy(treeData);
+            const totalNodes = hierarchy.descendants().length;
+            const leaves = hierarchy.leaves().length;
+            
+            // More aggressive font scaling for large trees
+            let fontSize = Math.max(8, Math.min(11, treeWidth / 40)); // Base font size
+            
+            // Additional scaling based on number of nodes and leaves
+            if (totalNodes > 15) {
+                fontSize = Math.max(6, fontSize * 0.8); // Reduce font size for trees with many nodes
+            }
+            if (leaves > 8) {
+                fontSize = Math.max(5, fontSize * 0.7); // Further reduce for trees with many leaves
+            }
+            if (totalNodes > 25) {
+                fontSize = Math.max(4, fontSize * 0.6); // Very small font for very large trees
+            }
+            
+            const treeSvg = d3.create("svg")
+                .attr("width", treeWidth)
+                .attr("height", treeHeight)
+                .style("background", "rgba(0, 0, 0, 0.9)")
+                .style("border-radius", "5px");
+            
+            const treeLayout = d3.tree()
+                .size([treeWidth - 30, treeHeight - 40]) // Reduced margins
+                .separation((a, b) => {
+                    // Much more aggressive separation to prevent overlaps
+                    const aTextWidth = a.data.name.length * (fontSize * 0.6);
+                    const bTextWidth = b.data.name.length * (fontSize * 0.6);
+                    const minNodeWidth = Math.max(aTextWidth + 20, 35);
+                    const maxNodeWidth = Math.max(bTextWidth + 20, 35);
+                    
+                    // Calculate required separation based on actual node sizes
+                    const requiredSeparation = (minNodeWidth + maxNodeWidth) / 2 + 15;
+                    const layoutScale = (treeWidth - 30) / 100; // Scale factor based on available width
+                    
+                    return Math.max(1.2, requiredSeparation / Math.max(layoutScale, 20));
+                });
+            
+            const hierarchyTree = d3.hierarchy(treeData);
+            const treeNodes = treeLayout(hierarchyTree);
+            
+            const g = treeSvg.append("g")
+                .attr("transform", "translate(15, 20)"); // Reduced translate values
+            
+            // Add links
+            g.selectAll(".tree-link")
+                .data(treeNodes.links())
+                .enter().append("line")
+                .attr("class", "tree-link")
+                .attr("x1", d => d.source.x)
+                .attr("y1", d => d.source.y)
+                .attr("x2", d => d.target.x)
+                .attr("y2", d => d.target.y)
+                .style("stroke", "#999")
+                .style("stroke-width", 1.5);
+            
+            // Add nodes
+            const node = g.selectAll(".tree-node")
+                .data(treeNodes.descendants())
+                .enter().append("g")
+                .attr("class", "tree-node")
+                .attr("transform", d => `translate(${d.x},${d.y})`);
+            
+            // Add background shapes with better sizing
+            node.each(function(d) {
+                const nodeElement = d3.select(this);
+                const textLength = d.data.name.length;
+                // Scale node size proportionally with font size - more aggressive scaling
+                const nodeWidth = Math.max(textLength * fontSize * 0.6 + 8, fontSize * 2);
+                const nodeHeight = Math.max(fontSize * 1.2 + 4, fontSize + 2);
+                
+                if (d.data.nodeType !== "Hole") {
+                    nodeElement.append("rect")
+                        .attr("width", nodeWidth)
+                        .attr("height", nodeHeight)
+                        .attr("x", -nodeWidth / 2)
+                        .attr("y", -nodeHeight / 2)
+                        .attr("rx", Math.max(2, fontSize * 0.2)) // Scale border radius with font size
+                        .style("fill", d => {
+                            const nodeTag = d.data.tag || d.data.nodeType;
+                            return CONFIG.TREE_NODE_COLORS[nodeTag] || CONFIG.TREE_NODE_COLORS.default;
+                        })
+                        .style("stroke", "#fff")
+                        .style("stroke-width", Math.max(0.5, fontSize * 0.1)); // Scale stroke width with font size
+                }
+            });
+            
+            // Add text labels with scaled font
+            node.append("text")
+                .attr("text-anchor", "middle")
+                .attr("dy", "0.35em")
+                .style("font-family", "monospace")
+                .style("font-size", `${fontSize}px`)
+                .style("fill", "white")
+                .style("font-weight", "bold")
+                .style("text-shadow", "1px 1px 1px rgba(0,0,0,0.8)")
+                .text(d => d.data.name); // Show full text without truncation
+            
+            return treeSvg.node();
+        }
+
+        function createChart(data) {
+            const radius = CONFIG.WIDTH / 2;
+            
+            const tree = d3.cluster()
+                .size([2 * Math.PI, radius - 100]);
+            const root = tree(bilink(d3.hierarchy(data)
+                .sort((a, b) => d3.ascending(a.height, b.height) || d3.ascending(parseInt(a.data.patternID), parseInt(b.data.patternID)))));
+
+            const actualNodes = root.leaves().filter(d => !d.data.isVirtual);
+            
+            const svg = d3.create("svg")
+                .attr("width", CONFIG.WIDTH)
+                .attr("height", CONFIG.WIDTH)
+                .attr("viewBox", [-CONFIG.WIDTH / 2, -CONFIG.WIDTH / 2, CONFIG.WIDTH, CONFIG.WIDTH])
+                .style("max-width", "100%")
+                .style("height", "auto")
+                .style("font", "10px sans-serif");
+
+            // Create gradients
+            const defs = svg.append("defs");
+            const allEdges = actualNodes.flatMap(leaf => leaf.outgoing);
+
+            allEdges.forEach((edge, i) => {
+                const [source, target] = edge;
+                
+                const gradient = defs.append("linearGradient")
+                    .attr("id", `gradient-${i}`)
+                    .attr("gradientUnits", "userSpaceOnUse")
+                    .attr("x1", source.y * Math.cos(source.x - Math.PI/2))
+                    .attr("y1", source.y * Math.sin(source.x - Math.PI/2))
+                    .attr("x2", target.y * Math.cos(target.x - Math.PI/2))
+                    .attr("y2", target.y * Math.sin(target.x - Math.PI/2));
+                
+                gradient.append("stop")
+                    .attr("offset", "0%")
+                    .attr("stop-color", CONFIG.GRADIENT_SOURCE_COLOR);
+                
+                gradient.append("stop")
+                    .attr("offset", CONFIG.GRADIENT_MIDDLE_START)
+                    .attr("stop-color", CONFIG.GRADIENT_MIDDLE_COLOR);
+                
+                gradient.append("stop")
+                    .attr("offset", CONFIG.GRADIENT_MIDDLE_END)
+                    .attr("stop-color", CONFIG.GRADIENT_MIDDLE_COLOR);
+                
+                gradient.append("stop")
+                    .attr("offset", "100%")
+                    .attr("stop-color", CONFIG.GRADIENT_TARGET_COLOR);
+            });
+
+            // Create nodes
+            const node = svg.append("g")
+                .selectAll()
+                .data(actualNodes)
+                .join("g")
+                .attr("transform", d => `rotate(${d.x * 180 / Math.PI - 90}) translate(${d.y},0)`)
+                .append("text")
+                .attr("dy", "0.31em")
+                .attr("x", d => d.x < Math.PI ? 6 : -6)
+                .attr("text-anchor", d => d.x < Math.PI ? "start" : "end")
+                .attr("transform", d => d.x >= Math.PI ? "rotate(180)" : null)
+                .attr("fill", d => levelColorScale(d.data.level))
+                .text(d => d.data.patternID)
+                .each(function(d) { 
+                    d.text = this; 
+                    d.originalColor = levelColorScale(d.data.level);
+                })
+                .style("cursor", "pointer")
+                .on("click", function(event, d) {
+                    handleNodeClick(event, d, this);
+                })
+                .on("mouseover", function(event, d) {
+                    handleNodeMouseOver(event, d, this);
+                })
+                .on("mouseout", function(event, d) {
+                    handleNodeMouseOut(event, d, this);
+                })
+                .call(text => text.append("title").text(d => `${d.data.patternID}
+Level: ${d.data.level}
+Dependencies: ${d.data.dependenciesDirect ? d.data.dependenciesDirect.length : 0}
+Dependents: ${d.data.dependentsDirect ? d.data.dependentsDirect.length : 0}
+Global Frequency: ${d.data.globalFreq || 0}
+${d.outgoing.length} outgoing connections
+${d.incoming.length} incoming connections
+Click to toggle persistent tree view`));
+
+            // Create links
+            const line = d3.lineRadial()
+                .curve(d3.curveBundle.beta(0.85))
+                .radius(d => d.y)
+                .angle(d => d.x);
+
+            const link = svg.append("g")
+                .attr("fill", "none")
+                .selectAll()
+                .data(allEdges)
+                .join("path")
+                .style("mix-blend-mode", "normal")
+                .attr("stroke", (d, i) => `url(#gradient-${i})`)
+                .attr("stroke-width", CONFIG.EDGE_WIDTH)
+                .attr("stroke-opacity", CONFIG.EDGE_OPACITY)
+                .attr("d", ([i, o]) => line(i.path(o)))
+                .each(function(d, i) { 
+                    d.path = this; 
+                    d.gradientId = `gradient-${i}`;
+                });
+
+            // Add frequency bars based on logarithm of frequency
+            // Filter out nodes with zero frequency for log calculation
+            const nodesWithFreq = actualNodes.filter(d => (d.data.globalFreq || 0) > 0);
+            
+            if (nodesWithFreq.length > 0) {
+                // Calculate log scale for frequency (using log base 10)
+                const minFreq = Math.min(...nodesWithFreq.map(d => d.data.globalFreq));
+                const maxFreq = Math.max(...nodesWithFreq.map(d => d.data.globalFreq));
+                
+                // Use log10 for better visual distribution
+                const logMinFreq = Math.log10(minFreq);
+                const logMaxFreq = Math.log10(maxFreq);
+                
+                // Scale bar height based on log of frequency
+                const barHeightScale = d3.scaleLinear()
+                    .domain([logMinFreq, logMaxFreq])
+                    .range([CONFIG.BAR_MIN_HEIGHT, CONFIG.BAR_MAX_HEIGHT])
+                    .clamp(true);
+
+                // Calculate the text envelope circle radius
+                // Get the maximum text width to determine the outer circle boundary
+                let maxTextRadius = 0;
+                actualNodes.forEach(d => {
+                    // Estimate text width based on character count and font size
+                    const estimatedTextWidth = d.data.patternID.length * 6; // Approximate 6px per character
+                    const textRadius = d.y + estimatedTextWidth + 10; // Add padding
+                    maxTextRadius = Math.max(maxTextRadius, textRadius);
+                });
+
+                // Add a visual circle to show the text envelope boundary (optional for debugging)
+                // svg.append("circle")
+                //     .attr("cx", 0)
+                //     .attr("cy", 0)
+                //     .attr("r", maxTextRadius)
+                //     .attr("fill", "none")
+                //     .attr("stroke", "#ddd")
+                //     .attr("stroke-width", 1)
+                //     .attr("stroke-dasharray", "5,5");
+
+                const barGroup = svg.append("g")
+                    .selectAll("g")
+                    .data(actualNodes)
+                    .join("g")
+                    .attr("transform", d => `rotate(${d.x * 180 / Math.PI - 90}) translate(${maxTextRadius},0)`);
+                
+                // Bars start from the text envelope circle and grow outward orthogonally
+                barGroup.append("line")
+                    .attr("x1", 0)  // Start at the text envelope circle
+                    .attr("y1", 0)
+                    .attr("x2", d => {
+                        const freq = d.data.globalFreq || 1;
+                        return freq > 0 ? barHeightScale(Math.log10(freq)) : CONFIG.BAR_MIN_HEIGHT;
+                    })  // Use logarithm of frequency
+                    .attr("y2", 0)  // Keep y constant for orthogonal direction
+                    .attr("stroke", d => levelColorScale(d.data.level))  // Color bars by level
+                    .attr("stroke-width", CONFIG.BAR_WIDTH)
+                    .attr("stroke-opacity", 0.8)
+                    .style("mix-blend-mode", "multiply");
+            }
+
+            // Store references for event handlers
+            window.currentChart = { link, actualNodes, allEdges };
+
+            // Add background click handler
+            svg.on("click", function(event) {
+                if (event.target === this && isToggledMode) {
+                    clearToggleState();
+                }
+            });
+
+            return svg.node();
+        }
+
+        // Event handlers
+        function handleNodeClick(event, d, element) {
+            if (toggledNode === d) {
+                clearToggleState();
+            } else {
+                if (toggledNode) {
+                    d3.select(toggledNode.text)
+                        .attr("font-weight", null)
+                        .style("text-decoration", "none");
+                }
+                
+                toggledNode = d;
+                isToggledMode = true;
+                
+                d3.select(element)
+                    .attr("font-weight", "bold")
+                    .style("text-decoration", "underline");
+                
+                updateInfoPanel(d);
+                highlightNodeEdges(d);
+            }
+            event.stopPropagation();
+        }
+
+        function handleNodeMouseOver(event, d, element) {
+            // Always allow hover highlighting, even in toggle mode
+            highlightNodeEdges(d);
+            d3.select(element).attr("font-weight", "bold");
+            updateInfoPanel(d);
+        }
+
+        function handleNodeMouseOut(event, d, element) {
+            // Always reset the current node's font weight first
+            d3.select(element).attr("font-weight", null);
+            
+            if (isToggledMode && toggledNode) {
+                // If we're in toggle mode, just restore the toggled node state
+                updateInfoPanel(toggledNode);
+                d3.select(toggledNode.text)
+                    .attr("font-weight", "bold")
+                    .style("text-decoration", "underline");
+            } else {
+                // No toggle mode - completely reset everything
+                resetAllEdges();
+                clearInfoPanel();
+            }
+        }
+
+        function updateInfoPanel(d) {
+            const infoContent = document.querySelector('.info-panel-content');
+            
+            // Create node details
+            const nodeDetailsHtml = `
+                <div class="node-details">
+                    <h3>Pattern ${d.data.patternID}</h3>
+                    <div class="detail-item">
+                        <span class="detail-label">Level:</span>
+                        <span class="detail-value">${d.data.level}</span>
+                    </div>
+                    <div class="detail-item">
+                        <span class="detail-label">Dependencies:</span>
+                        <span class="detail-value">${d.data.dependenciesDirect ? d.data.dependenciesDirect.length : 0}</span>
+                    </div>
+                    <div class="detail-item">
+                        <span class="detail-label">Dependents:</span>
+                        <span class="detail-value">${d.data.dependentsDirect ? d.data.dependentsDirect.length : 0}</span>
+                    </div>
+                    <div class="detail-item">
+                        <span class="detail-label">Global Frequency:</span>
+                        <span class="detail-value">${d.data.globalFreq || 0}</span>
+                    </div>
+                </div>
+            `;
+            
+            // Add tree display
+            let treeHtml = '<div id="tree-display">';
+            if (d.data.ruleTree) {
+                const treeSvg = createTreeTooltipSVG(d.data.ruleTree);
+                if (treeSvg) {
+                    treeHtml += treeSvg.outerHTML;
+                } else {
+                    treeHtml += '<div class="no-selection">No tree visualization available</div>';
+                }
+            } else {
+                treeHtml += '<div class="no-selection">No rule tree available</div>';
+            }
+            treeHtml += '</div>';
+            
+            infoContent.innerHTML = nodeDetailsHtml + treeHtml;
+        }
+
+        function clearInfoPanel() {
+            const infoContent = document.querySelector('.info-panel-content');
+            infoContent.innerHTML = '<div class="no-selection">Select a node to see details</div>';
+        }
+
+        function highlightNodeEdges(d) {
+            if (!window.currentChart) return;
+            
+            const { link, actualNodes, allEdges } = window.currentChart;
+            
+            // Only reset if we're not in toggle mode or if this is a different node than toggled
+            if (!isToggledMode || toggledNode !== d) {
+                resetAllEdges();
+            }
+            
+            // Set mix-blend-mode to null to make highlighted edges more visible
+            link.style("mix-blend-mode", null);
+            
+            // Get all related nodes (incoming sources and outgoing targets)
+            const relatedNodes = new Set();
+            relatedNodes.add(d); // Add the hovered node itself
+            
+            // Add incoming source nodes
+            d.incoming.forEach(([source, target]) => {
+                relatedNodes.add(source);
+            });
+            
+            // Add outgoing target nodes
+            d.outgoing.forEach(([source, target]) => {
+                relatedNodes.add(target);
+            });
+            
+            // Get related edges with their indices
+            const relatedEdgePaths = new Set();
+            const relatedEdgeIndices = new Map(); // Map path element to its index
+            
+            d.incoming.forEach(edge => {
+                relatedEdgePaths.add(edge.path);
+                // Find the index of this edge in allEdges
+                const edgeIndex = allEdges.findIndex(e => e === edge);
+                if (edgeIndex !== -1) {
+                    relatedEdgeIndices.set(edge.path, edgeIndex);
+                }
+            });
+            
+            d.outgoing.forEach(edge => {
+                relatedEdgePaths.add(edge.path);
+                // Find the index of this edge in allEdges
+                const edgeIndex = allEdges.findIndex(e => e === edge);
+                if (edgeIndex !== -1) {
+                    relatedEdgeIndices.set(edge.path, edgeIndex);
+                }
+            });
+            
+            // Grey out all nodes first
+            actualNodes.forEach(node => {
+                if (!relatedNodes.has(node)) {
+                    d3.select(node.text)
+                        .attr("fill", CONFIG.COLOR_NONE)
+                        .attr("opacity", 0.3);
+                }
+            });
+            
+            // Grey out all edges first (both opacity and color)
+            link
+                .attr("stroke", CONFIG.COLOR_NONE)
+                .attr("stroke-opacity", 0.3)
+                .attr("stroke-width", CONFIG.EDGE_WIDTH);
+            
+            // Highlight incoming edges and their source nodes
+            const incomingPaths = d.incoming.map(edge => edge.path);
+            const incomingTexts = d.incoming.map(([source]) => source.text);
+            
+            d3.selectAll(incomingPaths)
+                .attr("stroke", function() {
+                    const edgeIndex = relatedEdgeIndices.get(this);
+                    return edgeIndex !== undefined ? `url(#gradient-${edgeIndex})` : CONFIG.COLOR_NONE;
+                })
+                .attr("stroke-opacity", CONFIG.EDGE_OPACITY_HOVER)
+                .attr("stroke-width", CONFIG.EDGE_WIDTH_HOVER)
+                .raise();
+                
+            d3.selectAll(incomingTexts)
+                .attr("fill", CONFIG.COLOR_OUT)
+                .attr("font-weight", "bold")
+                .attr("opacity", 1);
+            
+            // Highlight outgoing edges and their target nodes
+            const outgoingPaths = d.outgoing.map(edge => edge.path);
+            const outgoingTexts = d.outgoing.map(([, target]) => target.text);
+            
+            d3.selectAll(outgoingPaths)
+                .attr("stroke", function() {
+                    const edgeIndex = relatedEdgeIndices.get(this);
+                    return edgeIndex !== undefined ? `url(#gradient-${edgeIndex})` : CONFIG.COLOR_NONE;
+                })
+                .attr("stroke-opacity", CONFIG.EDGE_OPACITY_HOVER)
+                .attr("stroke-width", CONFIG.EDGE_WIDTH_HOVER)
+                .raise();
+                
+            d3.selectAll(outgoingTexts)
+                .attr("fill", CONFIG.COLOR_IN)
+                .attr("font-weight", "bold")
+                .attr("opacity", 1);
+            
+            // Make sure the hovered node itself is fully visible
+            d3.select(d.text)
+                .attr("fill", d.originalColor)
+                .attr("font-weight", "bold")
+                .attr("opacity", 1);
+                
+            // Store highlighted elements for later cleanup
+            window.highlightedElements = {
+                incomingPaths,
+                incomingTexts,
+                outgoingPaths,
+                outgoingTexts,
+                relatedNodes,
+                relatedEdgeIndices
+            };
+        }
+
+        function resetAllEdges() {
+            if (!window.currentChart) return;
+            
+            const { link, actualNodes, allEdges } = window.currentChart;
+            
+            // Reset mix-blend-mode back to normal
+            link.style("mix-blend-mode", "normal");
+            
+            // Reset ALL links to their default state with original gradients
+            link
+                .attr("stroke", (d, i) => `url(#gradient-${i})`)  // Restore original gradients
+                .attr("stroke-opacity", CONFIG.EDGE_OPACITY)
+                .attr("stroke-width", CONFIG.EDGE_WIDTH)
+                .lower(); // Ensure all links are at the back
+            
+            // Reset all node colors, font weights, and opacity to original state
+            actualNodes.forEach(node => {
+                d3.select(node.text)
+                    .attr("fill", node.originalColor)
+                    .attr("font-weight", null)
+                    .attr("opacity", 1); // Reset opacity to full visibility
+            });
+            
+            // Clear any stored highlighted elements
+            if (window.highlightedElements) {
+                const { incomingPaths, incomingTexts, outgoingPaths, outgoingTexts, relatedEdgeIndices } = window.highlightedElements;
+                
+                // Explicitly reset previously highlighted paths to their original gradients
+                if (incomingPaths) d3.selectAll(incomingPaths)
+                    .attr("stroke", function() {
+                        const edgeIndex = relatedEdgeIndices.get(this);
+                        return edgeIndex !== undefined ? `url(#gradient-${edgeIndex})` : CONFIG.COLOR_NONE;
+                    })
+                    .attr("stroke-opacity", CONFIG.EDGE_OPACITY)
+                    .attr("stroke-width", CONFIG.EDGE_WIDTH);
+                    
+                if (outgoingPaths) d3.selectAll(outgoingPaths)
+                    .attr("stroke", function() {
+                        const edgeIndex = relatedEdgeIndices.get(this);
+                        return edgeIndex !== undefined ? `url(#gradient-${edgeIndex})` : CONFIG.COLOR_NONE;
+                    })
+                    .attr("stroke-opacity", CONFIG.EDGE_OPACITY)
+                    .attr("stroke-width", CONFIG.EDGE_WIDTH);
+                    
+                // Reset text colors and opacity
+                if (incomingTexts) d3.selectAll(incomingTexts)
+                    .attr("fill", d => d.originalColor)
+                    .attr("font-weight", null)
+                    .attr("opacity", 1);
+                    
+                if (outgoingTexts) d3.selectAll(outgoingTexts)
+                    .attr("fill", d => d.originalColor)
+                    .attr("font-weight", null)
+                    .attr("opacity", 1);
+                
+                window.highlightedElements = null;
+            }
+        }
+
+        function clearToggleState() {
+            if (toggledNode) {
+                d3.select(toggledNode.text)
+                    .attr("font-weight", null)
+                    .style("text-decoration", "none");
+            }
+            toggledNode = null;
+            isToggledMode = false;
+            resetAllEdges();
+            clearInfoPanel();
+        }
+
+        // Main execution
+        async function init() {
+            try {
+                
+                
+                const data = {{{dataSet}}};
+                const hierarchicalData = hierarchy(data);
+                const chart = createChart(hierarchicalData);
+                
+                // Replace loading message with chart
+                const container = document.getElementById('chart-container');
+                container.innerHTML = '';
+                container.appendChild(chart);
+                
+            } catch (error) {
+                console.error('Error initializing chart:', error);
+                document.getElementById('chart-container').innerHTML = 
+                    `<div class="error">Error loading visualization: ${error.message}</div>`;
+            }
+        }
+
+        // Initialize when DOM is ready
+        document.addEventListener('DOMContentLoaded', init);
+    </script>
+</body>
+</html>

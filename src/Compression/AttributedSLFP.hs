@@ -14,13 +14,17 @@ import qualified Compression.SLFP as SLFP
 import Compression.TreeUtils
 import Control.Arrow
 import Data.Bool (bool)
+import Data.Functor.Base (TreeF (..))
+import Data.Functor.Foldable
 import Data.List.Split
 import Data.Map (Map)
 import qualified Data.Map as Map
 import Data.Tree
+import Control.Monad
+import Data.Foldable
 
 deCompressTreeAttributed ::
-    (Ord a,_) =>
+    (Ord a, _) =>
     b -> -- default value for the attribute
     (b -> String -> Int -> Abstraction a -> b) ->
     (String -> Pattern (Abstraction a)) ->
@@ -49,9 +53,11 @@ deCompressTreeAttributed b f dP dM dA t@(Node r ts) = case snd r of
       where
         groupings = inferArity dP dM dA <$> useMeta meta x as
         meta = dM m
+    Hole -> t
 
-pSubstituteAllAttributed :: _ =>
-    b -> 
+pSubstituteAllAttributed ::
+    (_) =>
+    b ->
     Int ->
     (String, Pattern (Abstraction a)) ->
     (b -> String -> Int -> Abstraction a -> b) ->
@@ -61,33 +67,48 @@ pSubstituteAllAttributed :: _ =>
 pSubstituteAllAttributed defB n e f =
     applyPostOrder (pSubstitutionTopAttributed defB n e f)
 
-rSubstituteAllAttributed ::_ =>
-    b -> 
+rSubstituteAllAttributed ::
+    (_) =>
+    b ->
     (Abstraction a, [Int], Meta) ->
     Tree (b, Abstraction a) ->
     [Location] ->
     Tree (b, Abstraction a)
 rSubstituteAllAttributed b e = applyPostOrder (rSubstitutionTopAttributed b e)
 
-pSubstitutionTopAttributed ::_ =>
-    b -> 
+pSubstitutionTopAttributed ::
+    (_) =>
+    b ->
     Int ->
     (String, Pattern (Abstraction a)) ->
     (b -> String -> Int -> Abstraction a -> b) ->
     Tree (b, Abstraction a) ->
     Tree (b, Abstraction a)
-pSubstitutionTopAttributed defB n (patID, Comp i r y) f (Node (b, _) ts) =
-    Node (updatedAttr, r) $
-        take (i - 1) ts
-            ++ [Node (initAttr y, y) (take n . drop (i - 1) $ ts)]
-            ++ drop (i + n - 1) ts
+pSubstitutionTopAttributed defB n (patID, pat) f (Node (b, _) ts) =
+    case pat of
+        Comp i r y ->
+            Node (updatedAttr, r) $
+                take (i - 1) ts
+                    ++ [Node (initAttr y, y) (take n . drop (i - 1) $ ts)]
+                    ++ drop (i + n - 1) ts
+          where
+            -- only the top g's atttribute in @g oi f@ updated (for the task of locating the pattern)
+            updatedAttr = f b patID i r
+        TreePattern t -> fillHoles ((==Hole) . snd) 
+            t'{rootLabel = (f b patID undefined r,r) } 
+            ts
+            where 
+                t' = (initAttr &&& id) <$> t
+                (b,r) = rootLabel t'
   where
-    -- initAttr (Var patID2) = f defB patID2 i r
     initAttr = const defB
-    updatedAttr = f b patID i r -- only the top g's atttribute in @g oi f@ updated (for the task of locating the pattern)
-    
 
-rSubstitutionTopAttributed ::_ =>
+
+
+
+
+rSubstitutionTopAttributed ::
+    (_) =>
     b ->
     (Abstraction a, [Int], Meta) ->
     Tree (b, Abstraction a) ->
@@ -166,8 +187,8 @@ deCompressGAttributed defB f g@(SLFPAttributed dE dpG drG dA) = SLFPAttributed d
     dE' = deCompressLAttributed defB f dpG drG dA <$> dE
 
 deCompressLAttributed ::
-    (Ord a,_) =>
-    b -> 
+    (Ord a, _) =>
+    b ->
     (b -> String -> Int -> Abstraction a -> b) ->
     Map String (Pattern (Abstraction a)) ->
     Map String Meta ->
@@ -176,4 +197,8 @@ deCompressLAttributed ::
     SLTPAttributed b a
 deCompressLAttributed defB f dpG drG dA (SLTPAttributed t dP dM) = SLTPAttributed t' dP dM
   where
-    t' = deCompressTreeAttributed defB f ((dpG <> dP) Map.!) ((drG <> dM) Map.!) (dA Map.!) t
+    t' = deCompressTreeAttributed defB f 
+        ((dpG <> dP) `debugLookup`) 
+        ((drG <> dM) `debugLookup`) 
+        (dA `debugLookup`) 
+        t

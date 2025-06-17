@@ -15,21 +15,27 @@ import Prettyprinter
 
 -- import Visualization.TreeVisualizer
 
+import Compression.InlineDigram
 import Core.ParseTree
+import Data.Set (Set)
+import qualified Data.Set as Set
+import Data.Tree
 import Debug.Trace (traceM)
 import Experiment.TismirExperiment
 import Grammar.JazzHarmony.MusicTheory
 import Grammar.Rhythm.RhythmGrammar (RhythmNT, RhythmRule, RhythmTerminal)
-import Data.Set (Set)
 import Preprocessing.Preprocess
-import qualified Data.Set as Set
-import Data.Tree
+import Safe (readMay)
+import AnalyzePattern (SLFPBinding(patternLookup))
 
 proofTreeFolderPath :: String
 proofTreeFolderPath = "experiment/data/ProofTrees"
 
 minedMetas :: SLFP r b -> [(String, Meta)]
-minedMetas = filter (\(_, m) -> length m <= 4) . sortOn (metaRuleNameToInt . fst) . Map.toList . globalMetas
+minedMetas = Map.toList . globalMetas
+
+-- filter (\(_, m) -> length m <= 4)
+-- . sortOn (metaRuleNameToInt . fst)
 
 -- >>> (minedMetas . fixedPoint compressG . harmonyCorpuSLFP) <$> pieces
 
@@ -37,7 +43,11 @@ minedMetas = filter (\(_, m) -> length m <= 4) . sortOn (metaRuleNameToInt . fst
 -- [("RG1",[_,0]),("RG4",[★,_]),("RG9",[_,_,0,1]),("RG13",[★]),("RG16",[_,★]),("RG17",[_,0,0,0]),("RG20",[_,_,0,_]),("RG27",[_,_,_,1]),("RG62",[_,0,_,0]),("RG63",[_,0,_,_]),("RG64",[_,0,_]),("RG65",[_,_,_,0]),("RG100",[_,_,0,0]),("RG101",[_,_,_,2]),("RG148",[_,_,1,_])]
 
 metaRuleNameToInt :: String -> Int
-metaRuleNameToInt = read . drop 2
+metaRuleNameToInt = f . drop 2
+  where
+    f x = case readMay x of
+        Just n -> n
+        Nothing -> error $ "read Int fail: " <> x
 
 -- >>> metaRuleNameToInt "RG115"
 -- 115
@@ -75,7 +85,7 @@ data PieceInfo k r = PieceInfo
     deriving (Generic, Show)
 
 instance (ToJSON k, ToJSON r) => ToJSON (PieceInfo k r)
-instance (FromJSON k, FromJSON r) =>  FromJSON (PieceInfo k r)
+instance (FromJSON k, FromJSON r) => FromJSON (PieceInfo k r)
 
 data SizeCurve = SizeCurve
     { step :: Int
@@ -90,67 +100,88 @@ reportCompression :: (_) => FilePath -> SLFP a b -> IO ()
 reportCompression resultDir slfp = do
     traceM $ show $ Map.size $ sltps slfp
     let steps = compressGSteps slfp
-        final = last steps
-        ms = minedMetas final
-        ruleStats = ruleSummary final
-        pieceInfos = fmap (\(k,((m,n),ts)) -> PieceInfo k m n ts) $ Map.toList $ Map.intersectionWith 
-            (,)
-            (individualPieceChange slfp final)
-            (pieceDecompressProcess final)
+        final' = last steps
+        final = metaStageCompress (show) final'
+        
 
+    putStrLn "finished compression"
+
+    putStrLn "saving finalSLFP"
     encodeFile (resultDir <> "/finalSLFP.json") final
-    encodeFile (resultDir <> "/globalMetas.json") ms
-    encodeFile (resultDir <> "/ruleStats.json") ruleStats
 
-    encodeFile
-        (resultDir <> "sizeCurve.json")
-        (uncurry SizeCurve <$> zip [1 ..] (size <$> steps))
+    putStrLn "saving globalMetas"
+    encodeFile (resultDir <> "/globalMetas.json") (minedMetas final)
 
-    encodeFile (resultDir <> "/patternLocs.json") $  markPatternIdInCorpus final
-
-    -- encodeFile (resultDir <> "/patternHighlightedInCorpus.json") $
-    --     report highlightPatternInCorpus final
-
-    let patternInfo = mkPatternInfo final <$> Map.keys (globalPatterns final)
+    putStrLn "computing pieceInfos"
+    let pieceInfos =
+            fmap (\(k, ((m, n), ts)) -> PieceInfo k m n ts) $
+                Map.toList $
+                    Map.intersectionWith
+                        (,)
+                        (individualPieceChange slfp final)
+                        (pieceDecompressProcess final)
     
-    encodeFile (resultDir <> "/patternInfo.json") patternInfo
+    putStrLn "saving pieceInfos"
     encodeFile (resultDir <> "/pieceInfo.json") pieceInfos
+
+    putStrLn "saving ruleStats"
+    encodeFile (resultDir <> "/ruleStats.json") $ ruleSummary final
+
+    putStrLn "saving sizeCurve"
+    encodeFile
+        (resultDir <> "/sizeCurve.json")
+        (uncurry SizeCurve <$> zip [1 ..] (size <$> steps ++ [final]))
+
+    putStrLn "saving patternLocs"
+    encodeFile (resultDir <> "/patternLocs.json") $ markPatternIdInCorpus final
+
+    putStrLn "computing patternInfo"
+    let patternInfo = mkPatternInfo final $ Map.keys (globalPatterns final)
+
+    putStrLn "saving patternInfo"
+    encodeFile (resultDir <> "/patternInfo.json") patternInfo
+
+    
 
 type PatternID = String
 
-
-
-data PatternInfo r k = PatternInfo {
-    patternID :: PatternID,
-    definition :: Pattern (Abstraction r) , 
-    dependentsDirect :: Set PatternID,
-    dependenciesDirect :: Set PatternID,
-    globalFreq :: Int,
-    sizeExpanded :: Int,
-    occuranceInCorpus :: Set k,
-    impact :: Double,
-    depths :: [Double],
-    ruleTree :: Tree (Abstraction r)
-}
+data PatternInfo r k = PatternInfo
+    { patternID :: PatternID
+    , definition :: Pattern (Abstraction r)
+    , dependentsDirect :: Set PatternID
+    , dependenciesDirect :: Set PatternID
+    , globalFreq :: Int
+    , sizeExpanded :: Int
+    , occuranceInCorpus :: Set k
+    , impact :: Double
+    , depths :: [Double]
+    , ruleTree :: Tree (Abstraction r)
+    }
     deriving (Generic, Show)
 
-instance (ToJSON k,ToJSON r) => ToJSON (PatternInfo r k)
-instance (FromJSON k,FromJSON r, Ord k) => FromJSON (PatternInfo r k)
+instance (ToJSON k, ToJSON r) => ToJSON (PatternInfo r k)
+instance (FromJSON k, FromJSON r, Ord k) => FromJSON (PatternInfo r k)
 
-mkPatternInfo :: _ => SLFP r k -> PatternID -> PatternInfo r k
-mkPatternInfo slfp pId = PatternInfo {
-    patternID = pId,
-    definition = globalPatterns slfp Map.! pId,
-    dependentsDirect = directDependents slfp pId,
-    dependenciesDirect = directDependencies slfp pId,
-    globalFreq = patternFreqInCorpus slfp Map.! pId,
-    sizeExpanded = patternSizeExpanded slfp pId,
-    occuranceInCorpus = patternOccuranceG slfp pId,
-    depths = patternDepthInCorpus slfp Map.! pId,
-    impact = patternImpact (patternFreqInCorpus slfp Map.!) (Set.toList . directDependents slfp) pId,
-    ruleTree = patternAsComputation slfp pId
-    }
-
+mkPatternInfo :: (_) => SLFP r k -> [PatternID] -> [PatternInfo r k]
+mkPatternInfo slfp pIds = let 
+    dFreq = patternFreqInCorpus slfp 
+    globalFrequency = (dFreq `debugLookup`) 
+    in
+    
+        (\pId ->
+        PatternInfo
+            { patternID = pId
+            , definition = globalPatterns slfp `debugLookup` pId
+            , dependentsDirect = directDependents slfp pId
+            , dependenciesDirect = directDependencies slfp pId
+            , globalFreq =globalFrequency pId
+            , sizeExpanded = patternSizeExpanded slfp pId
+            , occuranceInCorpus = patternOccuranceG slfp pId
+            , depths = patternDepthInCorpus slfp `debugLookup` pId
+            , impact = patternImpact globalFrequency (Set.toList . directDependents slfp) pId
+            , ruleTree = patternAsComputation slfp pId
+            } )
+            <$> pIds
 
 -- compressCorpus :: _ => (FilePath -> IO [a]) ->
 --     (a -> b) ->
@@ -198,8 +229,9 @@ runExperiment readRuleTree inputFile outputDir = do
 jazzHarmonyExperiment :: FilePath -> FilePath -> IO ()
 jazzHarmonyExperiment =
     runExperiment
-        (eitherDecodeFileStrict
-            @[(String, ParseTree (Maybe RuleNames) ChordLabel ChordLabel)])
+        ( eitherDecodeFileStrict
+            @[(String, ParseTree (Maybe RuleNames) ChordLabel ChordLabel)]
+        )
 
 rhythmExperiment :: FilePath -> FilePath -> IO ()
 rhythmExperiment =

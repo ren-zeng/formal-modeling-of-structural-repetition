@@ -17,6 +17,8 @@ import RIO.FilePath (takeDirectory)
 import System.Environment (getExecutablePath)
 import Visualization.Text (drawText)
 import Visualization.Tree (treeDiagram)
+import qualified VisualHTML.Main as VisualHTML
+import System.Directory (setCurrentDirectory)
 
 type PatternID = String
 
@@ -53,8 +55,8 @@ plotPatternLocs = do
             repoRoot <> "/Experiment/Result/Harmony/finalSLFP.json"
     let piecesToShow = ["(Valid)Solar"]
     let pieceTreeCompressed  =
-            compressedTree . (sltps finalSLFP Map.!) 
-    let treeToShow pieceTitle = locs Map.! pieceTitle
+            compressedTree . (debugLookup $ sltps finalSLFP ) 
+    let treeToShow pieceTitle = debugLookup locs pieceTitle
     let globalPatternUsed titles =
             foldMap
                 ( foldMap
@@ -136,7 +138,9 @@ main :: IO ()
 main = do
     mainRoot <- getExecutablePath
     let repoRoot = takeDirectory $ takeDirectory mainRoot
-    runAllExperiments (repoRoot <> "/Experiment")
-    plotPatternLocs
+    setCurrentDirectory repoRoot
+    runAllExperiments "experiment"
+    VisualHTML.main
+    -- plotPatternLocs
 
 -- plotHighlighted

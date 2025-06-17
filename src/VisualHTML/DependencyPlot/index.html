@@ -1,0 +1,275 @@
+<!DOCTYPE html>
+<meta charset="utf-8">
+<title>Hierarchical edge bundling</title>
+<link rel="stylesheet" type="text/css" href="./inspector.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<style>
+    .button-container {
+        position: fixed;
+        top: 20px;
+        right: 20px;
+        z-index: 1000;
+        display: flex;
+        gap: 10px;
+        flex-direction: column;
+    }
+
+    .save-button {
+        padding: 10px 15px;
+        background-color: #69b3a2;
+        color: white;
+        border: none;
+        border-radius: 4px;
+        cursor: pointer;
+        font-size: 14px;
+        touch-action: manipulation;
+    }
+
+    .save-button:hover {
+        background-color: #85c7b5;
+    }
+</style>
+<body height= 100%, overflow= hidden>
+    <div class="button-container">
+        <button class="save-button" onclick="saveSVG()">Save as SVG</button>
+        <button class="save-button" onclick="savePDF()">Save as PDF</button>
+    </div>
+    <div id="myPlot", style="display: flex; flex-direction: row; align-items: center; justify-content: center;"></div>
+    <script type="module">
+
+    import define from "./index.js";
+    import {Runtime, Library, Inspector} from "./runtime.js";
+
+    const runtime = new Runtime();
+    const main = runtime.module(define, Inspector.into(document.body));
+
+    </script>
+    <script>
+        // Function to save as SVG
+        function saveSVG() {
+            const svgData = document.querySelector('svg').outerHTML;
+            const blob = new Blob([svgData], { type: 'image/svg+xml' });
+            const url = URL.createObjectURL(blob);
+            const link = document.createElement('a');
+            link.href = url;
+            link.download = 'Hierarchical Edge Bundling.svg';
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            URL.revokeObjectURL(url);
+        }
+
+        // Function to save as PDF
+        function savePDF() {
+            try {
+                const svgElement = document.querySelector('svg');
+                if (!svgElement) {
+                    alert('No SVG found to export');
+                    return;
+                }
+
+                // Method 1: Try direct jsPDF SVG support first (newer versions support SVG directly)
+                try {
+                    const { jsPDF } = window.jspdf;
+                    
+                    // Get SVG dimensions
+                    let svgWidth, svgHeight;
+                    const viewBox = svgElement.getAttribute('viewBox');
+                    
+                    if (viewBox) {
+                        const viewBoxValues = viewBox.split(' ');
+                        svgWidth = parseFloat(viewBoxValues[2]);
+                        svgHeight = parseFloat(viewBoxValues[3]);
+                    } else {
+                        const rect = svgElement.getBoundingClientRect();
+                        svgWidth = rect.width || 954;
+                        svgHeight = rect.height || 954;
+                    }
+
+                    const orientation = svgWidth > svgHeight ? 'landscape' : 'portrait';
+                    const pdf = new jsPDF({
+                        orientation: orientation,
+                        unit: 'pt',
+                        format: [svgWidth, svgHeight]
+                    });
+
+                    // Try to add SVG directly (this works with newer jsPDF versions)
+                    const svgString = new XMLSerializer().serializeToString(svgElement);
+                    
+                    // If jsPDF supports SVG, this will work
+                    if (pdf.svg) {
+                        pdf.svg(svgString, {
+                            x: 0,
+                            y: 0,
+                            width: svgWidth,
+                            height: svgHeight
+                        }).then(() => {
+                            pdf.save('Hierarchical Edge Bundling.pdf');
+                        });
+                        return;
+                    }
+                } catch (directSvgError) {
+                    console.log('Direct SVG method failed, trying canvas method:', directSvgError);
+                }
+
+                // Method 2: Canvas conversion with enhanced compatibility
+                const svgClone = svgElement.cloneNode(true);
+                
+                // Remove any problematic elements that might cause rendering issues
+                const problematicElements = svgClone.querySelectorAll('foreignObject, switch, metadata');
+                problematicElements.forEach(el => el.remove());
+                
+                // Ensure all style properties are inline
+                const allElements = svgClone.querySelectorAll('*');
+                allElements.forEach(element => {
+                    try {
+                        const computedStyle = window.getComputedStyle(element);
+                        let styleStr = '';
+                        
+                        // Only copy essential style properties to avoid conflicts
+                        const importantProps = ['fill', 'stroke', 'stroke-width', 'opacity', 'font-family', 'font-size', 'font-weight'];
+                        importantProps.forEach(prop => {
+                            const value = computedStyle.getPropertyValue(prop);
+                            if (value && value !== 'none' && value !== 'normal') {
+                                styleStr += `${prop}:${value};`;
+                            }
+                        });
+                        
+                        if (styleStr) {
+                            element.setAttribute('style', styleStr);
+                        }
+                    } catch (styleError) {
+                        // Ignore style errors for individual elements
+                    }
+                });
+
+                // Get dimensions
+                let svgWidth, svgHeight;
+                const viewBox = svgElement.getAttribute('viewBox');
+                
+                if (viewBox) {
+                    const viewBoxValues = viewBox.split(' ');
+                    svgWidth = parseFloat(viewBoxValues[2]);
+                    svgHeight = parseFloat(viewBoxValues[3]);
+                } else {
+                    const rect = svgElement.getBoundingClientRect();
+                    svgWidth = rect.width || 954;
+                    svgHeight = rect.height || 954;
+                }
+
+                // Create canvas
+                const canvas = document.createElement('canvas');
+                const ctx = canvas.getContext('2d');
+                
+                // Use a conservative scale factor
+                const scaleFactor = 1.5;
+                canvas.width = svgWidth * scaleFactor;
+                canvas.height = svgHeight * scaleFactor;
+                
+                // Set white background
+                ctx.fillStyle = 'white';
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+                ctx.scale(scaleFactor, scaleFactor);
+
+                // Create image
+                const img = new Image();
+                img.crossOrigin = 'anonymous';
+                
+                const timeout = setTimeout(() => {
+                    alert('PDF generation timed out. The visualization is too complex for PDF export. Please use SVG export instead.');
+                }, 20000);
+
+                img.onload = function () {
+                    try {
+                        clearTimeout(timeout);
+                        
+                        // Draw image
+                        ctx.drawImage(img, 0, 0, svgWidth, svgHeight);
+                        
+                        // Generate image data with error checking
+                        let imgData;
+                        try {
+                            imgData = canvas.toDataURL('image/png', 0.9);
+                        } catch (canvasError) {
+                            throw new Error('Canvas to PNG conversion failed: ' + canvasError.message);
+                        }
+                        
+                        // Validate image data more thoroughly
+                        if (!imgData || imgData === 'data:,' || imgData.length < 1000 || !imgData.startsWith('data:image/png')) {
+                            throw new Error('Generated image data is invalid or too small');
+                        }
+
+                        // Create PDF
+                        const { jsPDF } = window.jspdf;
+                        const orientation = svgWidth > svgHeight ? 'landscape' : 'portrait';
+                        const pdf = new jsPDF({
+                            orientation: orientation,
+                            unit: 'pt',
+                            format: [svgWidth, svgHeight]
+                        });
+
+                        pdf.addImage(imgData, 'PNG', 0, 0, svgWidth, svgHeight, '', 'FAST');
+                        pdf.save('Hierarchical Edge Bundling.pdf');
+                        
+                    } catch (error) {
+                        clearTimeout(timeout);
+                        console.error('Error in canvas method:', error);
+                        
+                        // Method 3: Fallback to simplified PDF with text
+                        try {
+                            const { jsPDF } = window.jspdf;
+                            const pdf = new jsPDF();
+                            pdf.setFontSize(16);
+                            pdf.text('Hierarchical Edge Bundling Visualization', 20, 30);
+                            pdf.setFontSize(12);
+                            pdf.text('The visualization was too complex to export as an image.', 20, 50);
+                            pdf.text('Please use the SVG export option for full fidelity.', 20, 70);
+                            pdf.text('Generated on: ' + new Date().toLocaleString(), 20, 90);
+                            pdf.save('Hierarchical Edge Bundling - Text Only.pdf');
+                            
+                            alert('Complex visualization exported as text-only PDF. For the full visualization, please use SVG export.');
+                        } catch (fallbackError) {
+                            alert('PDF export failed completely. Please use SVG export: ' + error.message);
+                        }
+                    }
+                };
+
+                img.onerror = function(error) {
+                    clearTimeout(timeout);
+                    console.error('Image loading failed:', error);
+                    alert('Failed to convert SVG to image. This visualization may be too complex for PDF export. Please use SVG export instead.');
+                };
+
+                // Create SVG data URL with better encoding
+                try {
+                    const svgString = new XMLSerializer().serializeToString(svgClone);
+                    
+                    // Clean up the SVG string
+                    const cleanSvgString = svgString
+                        .replace(/(\r\n|\n|\r)/gm, '') // Remove line breaks
+                        .replace(/\s+/g, ' ') // Normalize whitespace
+                        .trim();
+                    
+                    const svgBlob = new Blob([cleanSvgString], { type: 'image/svg+xml;charset=utf-8' });
+                    const url = URL.createObjectURL(svgBlob);
+                    
+                    img.src = url;
+                    
+                    // Clean up after use
+                    setTimeout(() => {
+                        URL.revokeObjectURL(url);
+                    }, 25000);
+                    
+                } catch (encodingError) {
+                    clearTimeout(timeout);
+                    console.error('SVG encoding failed:', encodingError);
+                    alert('Failed to process SVG for PDF export. Please use SVG export instead.');
+                }
+
+            } catch (error) {
+                console.error('Error in PDF export:', error);
+                alert('PDF export failed: ' + error.message + '. Please use SVG export instead.');
+            }
+        }
+    </script>
+</body>

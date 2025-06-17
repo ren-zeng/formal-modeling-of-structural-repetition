@@ -1,0 +1,14 @@
+{
+  "name": "@d3/hierarchical-edge-bundling",
+  "main": "22ac214fe83d7053@439.js",
+  "version": "439.0.0",
+  "homepage": "https://observablehq.com/@d3/hierarchical-edge-bundling",
+  "author": {
+    "name": "D3",
+    "url": "https://observablehq.com/@d3"
+  },
+  "type": "module",
+  "peerDependencies": {
+    "@observablehq/runtime": "4 - 5"
+  }
+}

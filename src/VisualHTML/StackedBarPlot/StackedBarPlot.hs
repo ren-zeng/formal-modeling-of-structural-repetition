@@ -54,8 +54,8 @@ plotStackedBarPlot = mkHTML "src/VisualHTML/StackedBarPlot/StackedBarPlot.mustac
 -- - frequency: the numerical value
 -- - category: which category/group this data point belongs to
 -- For example: [{"feature": "Rule1", "frequency": 10, "category": "group1"}, ...]
-exampleMain :: IO ()
-exampleMain = do
+main :: IO ()
+main = do
     rhythmConfig <- createStackedBarPlotConfig
         "Classical Rhythm Rule Distribution (Stacked)"
         "Experiment/DataSet/Rhythm/Classical/RuleInfo.json"
@@ -70,5 +70,5 @@ exampleMain = do
         harmonyConfig
         "Experiment/DataSet/Harmony/StackedRuleDistribution.html"
 
--- >>> exampleMain
+-- >>> main
 

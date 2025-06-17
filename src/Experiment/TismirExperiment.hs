@@ -23,6 +23,7 @@ module Experiment.TismirExperiment (
     getRuleDepth,
     SizeFreqDistribution (..),
     OccuranceHeatMap (..),
+    pruneGlobalPatterns,
 
     -- * helper function for reporting pattern together with a feature of interest
     report,
@@ -110,6 +111,7 @@ matchAbstraction p = \case
     Var s -> p == s
     With x (mID, xs) -> any (matchAbstraction p) (x : xs)
     Constant _ -> False
+    Hole -> False
 
 isPattern :: PatternID -> Abstraction r -> Bool
 isPattern p = \case
@@ -117,7 +119,9 @@ isPattern p = \case
     _ -> False
 
 matchPattern :: PatternID -> Pattern (Abstraction r) -> Bool
-matchPattern p (Comp i x y) = any (matchAbstraction p) [x, y]
+matchPattern pID = \case
+    Comp i x y -> any (matchAbstraction pID) [x, y]
+    TreePattern t -> any (matchAbstraction pID) t
 
 reachables :: (Ord a) => (a -> Set a) -> a -> Set a
 reachables f initial = fixedPoint' Set.empty (f initial)
@@ -176,8 +180,9 @@ markPatternIdInCorpus =
 
 patternFreqInCorpus :: (_) => SLFP a k -> Map PatternID Int
 patternFreqInCorpus slfp =
-    Map.filterWithKey
-        (\k _ -> k `Map.member` globalPatterns slfp)
+    Map.unionWith max (0 <$ globalPatterns slfp)
+        . Map.filterWithKey
+            (\k _ -> k `Map.member` globalPatterns slfp)
         . Map.unionsWith (+)
         . fmap (getPatternCount . fmap fst)
         . Map.elems
@@ -207,8 +212,9 @@ patternDepthInCorpus ::
     SLFP a k ->
     Map PatternID [Double]
 patternDepthInCorpus slfp =
-    Map.filterWithKey
-        (\k _ -> k `Map.member` globalPatterns slfp)
+    Map.unionWith max ([] <$ globalPatterns slfp)
+        . Map.filterWithKey
+            (\k _ -> k `Map.member` globalPatterns slfp)
         . Map.unionsWith (++)
         . fmap (getPatternDepth . fmap fst)
         . Map.elems
@@ -250,6 +256,7 @@ directDependents slfp p =
 directDependencies :: (_) => SLFP r k -> PatternID -> Set PatternID
 directDependencies slfp p = case globalPatterns slfp Map.! p of
     Comp i x y -> foldMap getVariables [x, y]
+    TreePattern t -> foldMap getVariables t
 
 -- | the set of pieces that contains the pattern
 patternOccuranceG ::
@@ -337,17 +344,24 @@ sumOverRank xs = sum $ zipWith (*) [1 ..] $ sortBy (comparing Down) xs
 -- >>> sumOverRank [2,5,1]
 -- 12.0
 
-iterateTilFixed :: Eq t => (t -> t) -> t -> [t]
-iterateTilFixed f x = let next = f x in 
-    if next == x
-        then [x]
-        else x : iterateTilFixed f next
+iterateTilFixed :: (Eq t) => (t -> t) -> t -> [t]
+iterateTilFixed f x =
+    let next = f x
+     in if next == x
+            then [x]
+            else x : iterateTilFixed f next
 
 pieceDecompressProcess :: (_) => SLFP r k -> Map k [Tree (Abstraction r)]
 pieceDecompressProcess slfp = nub . fmap compressedTree <$> pieceSLTPs
   where
     pieceSLTPs = Map.unionsWith (++) $ fmap pure . sltps <$> iterateTilFixed deCompressG slfp
 
-
 -- >>> iterateTilFixed (\x -> if x == 0 then 0 else x - 1 ) 12
 -- [12,11,10,9,8,7,6,5,4,3,2,1,0]
+pruneGlobalPatterns :: (_) => SLFP a b -> SLFP a b
+pruneGlobalPatterns slfp = slfp{globalPatterns = dP}
+  where
+    dP = f $ globalPatterns slfp
+    f = Map.filterWithKey $ \k v ->
+        (not . null $ directDependents slfp k)
+            && patternFreqInCorpus slfp Map.! k >0
