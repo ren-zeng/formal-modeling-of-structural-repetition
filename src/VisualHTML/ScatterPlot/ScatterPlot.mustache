@@ -862,7 +862,7 @@
                 .style("border-radius", "5px");
 
             // Apply scaling to the tree layout based on ideal dimensions
-            const layoutWidth = (dimensions.idealWidth - 60) * scale;
+            const layoutWidth = (dimensions.idealWidth) * scale;
             const layoutHeight = (dimensions.idealHeight - 60) * scale;
 
             const treeLayout = d3.tree()
@@ -882,7 +882,7 @@
                     
                     // Increase separation for siblings vs cousins
                     const isSibling = a.parent === b.parent;
-                    const separationMultiplier = isSibling ? 1.5 : 1.0;
+                    const separationMultiplier = isSibling ? 1.0 : 1.0;
                     
                     return baseSeparation * separationMultiplier / scale;
                 });
@@ -1576,8 +1576,8 @@
                 .style("border-radius", "5px");
 
             // Apply scaling to the tree layout based on ideal dimensions
-            const layoutWidth = (dimensions.idealWidth - 60) * scale;
-            const layoutHeight = (dimensions.idealHeight - 60) * scale;
+            const layoutWidth = (dimensions.idealWidth ) * scale;
+            const layoutHeight = (dimensions.idealHeight -60 ) * scale;
 
             const treeLayout = d3.tree()
                 .size([layoutWidth, layoutHeight])
@@ -1592,7 +1592,7 @@
                     const minSeparation = (aWidth + bWidth) / 2 + 20; // Extra padding
                     
                     // Scale separation based on available width and tree scale
-                    const baseSeparation = Math.max(2.0, minSeparation / 60);
+                    const baseSeparation = Math.max(2, minSeparation / 60);
                     
                     // Increase separation for siblings vs cousins
                     const isSibling = a.parent === b.parent;

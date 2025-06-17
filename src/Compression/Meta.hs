@@ -10,7 +10,8 @@ data RepSymbol = New | Star | RepLoc Int deriving (Eq, Ord, Generic,Show,Read)
 instance ToJSON RepSymbol
 instance FromJSON RepSymbol
 
-
+nonTrivial :: Meta -> Bool 
+nonTrivial = any (/= New)
 
 -- >>> read "[New,RepLoc 0]" :: Meta
 -- [New,RepLoc 0]

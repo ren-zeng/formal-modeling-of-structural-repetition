@@ -141,6 +141,6 @@ main = do
     setCurrentDirectory repoRoot
     runAllExperiments "experiment"
     VisualHTML.main
-    -- plotPatternLocs
+    plotPatternLocs
 
 -- plotHighlighted

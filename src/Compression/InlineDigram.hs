@@ -49,7 +49,9 @@ inlineRRewriteTop mtID t
       let
         mt = inferMeta (rootLabel t) (rootLabel <$> subForest t)
        in
-        rRewriteTop (mtID mt, mt) t
+        if nonTrivial mt 
+          then  rRewriteTop (mtID mt, mt) t
+        else t
   | otherwise = t
 
 testMTID :: Meta -> String

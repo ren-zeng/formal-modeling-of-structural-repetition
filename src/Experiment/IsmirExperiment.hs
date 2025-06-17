@@ -100,8 +100,8 @@ reportCompression :: (_) => FilePath -> SLFP a b -> IO ()
 reportCompression resultDir slfp = do
     traceM $ show $ Map.size $ sltps slfp
     let steps = compressGSteps slfp
-        final' = last steps
-        final = metaStageCompress (show) final'
+        final = last steps
+        -- final = metaStageCompress (show) final'
         
 
     putStrLn "finished compression"
