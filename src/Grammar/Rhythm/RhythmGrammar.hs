@@ -163,7 +163,7 @@ satisfyRule (Shift Late) x [x1] =
     and
         [ body x1 == body x
         , upbeat x1 + coda x1 == upbeat x + coda x
-        , coda x1 < coda x
+        , coda x1 > coda x
         ]
 satisfyRule _ _ _ = False
 

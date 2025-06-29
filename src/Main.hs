@@ -9,7 +9,7 @@ import qualified Data.Set as Set
 import Data.Tree
 import Diagrams
 import Diagrams.Backend.SVG (renderSVG)
-import Experiment.IsmirExperiment (runAllExperiments)
+import Experiment.IsmirExperiment (runAllExperiments, PieceInfo (deCompressionProcess, pieceName))
 import Experiment.TismirExperiment
 import Grammar.JazzHarmony.JazzGrammar
 import Prettyprinter (Pretty (..))
@@ -53,10 +53,16 @@ plotPatternLocs = do
     Just finalSLFP <-
         decodeFileStrict @(SLFP RuleNames PieceID) $
             repoRoot <> "/Experiment/Result/Harmony/finalSLFP.json"
+
+    Just pieceInfos <-
+        decodeFileStrict @[PieceInfo PieceID RuleNames] $
+            repoRoot <> "/Experiment/Result/Harmony/pieceInfo.json"
     let piecesToShow = ["(Valid)Solar"]
-    let pieceTreeCompressed  =
+    let pieceTreeCompressed   =
             compressedTree . (debugLookup $ sltps finalSLFP ) 
     let treeToShow pieceTitle = debugLookup locs pieceTitle
+    let decompressions k = pieceDecompressProcessAttributed finalSLFP
+            Map.! k
     let globalPatternUsed titles =
             foldMap
                 ( foldMap
@@ -84,7 +90,9 @@ plotPatternLocs = do
                 ( \x ->
                     vsep
                         1
-                        [ drawText x
+                        [ drawText x,
+                        treeDiagram (drawText . show . pretty)
+                        ((\(TreePattern t) -> t) $ globalPatterns finalSLFP Map.! x)
                         , treeDiagram
                             (drawText . show . pretty)
                             (patternAsComputation finalSLFP x)
@@ -116,9 +124,10 @@ plotPatternLocs = do
             vsep
                 1
                 [ drawText pieceTitle
-                , treeDiagram 
-                    (drawText . show . pretty) 
-                    (pieceTreeCompressed pieceTitle)
+                , hsep 1 $ treeDiagram 
+                    drawNode
+                    <$> decompressions pieceTitle
+                    -- (pieceTreeCompressed pieceTitle)
                 , treeDiagram
                     drawNode
                     (treeToShow pieceTitle)

@@ -291,8 +291,10 @@ instance (Size a) => Size (Tree a) where
 instance (Size b) => Size (Map.Map a b) where
   size m = getSum $ foldMap (fromIntegral . size) m
 
-instance Size (Pattern a) where
-  size = const 3
+instance (Size a) => Size (Pattern a) where
+  size = \case 
+    Comp{} ->  3
+    TreePattern t -> sum $ size <$> t
 
 instance Size Meta where
   size = length
@@ -309,7 +311,7 @@ class (Size a) => Compressor a where
 instance Compressor Meta where
   unitSave = length . filter (/= New)
 
-instance Compressor (Pattern a) where
+instance Size a => Compressor (Pattern a) where
   unitSave = const 1
 
 evaluateAbstraction ::
@@ -459,7 +461,7 @@ deCompressL ::
   SLTP a
 deCompressL dpG drG dA (SLTP t dP dM) = SLTP t' dP dM
  where
-  t' = deCompressTree ((dpG <> dP) Map.!) ((drG <> dM) Map.!) (dA Map.!) t
+  t' = deCompressTree (debugLookup (dpG <> dP) ) (debugLookup (drG <> dM)) (debugLookup dA ) t
 
 debugLookup :: (Ord k, Show k, Show a) => Map.Map k a -> k -> a
 debugLookup d k = case Map.lookup k d of

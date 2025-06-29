@@ -24,12 +24,13 @@ module Experiment.TismirExperiment (
     SizeFreqDistribution (..),
     OccuranceHeatMap (..),
     pruneGlobalPatterns,
+    pieceDecompressProcessAttributed,
 
     -- * helper function for reporting pattern together with a feature of interest
     report,
 ) where
 
-import Compression.AttributedSLFP (SLFPAttributed)
+import Compression.AttributedSLFP (SLFPAttributed (sltpsAttributed), deCompressGAttributed)
 import qualified Compression.AttributedSLFP as Attributed
 import Compression.SLFP
 import Control.Arrow
@@ -142,7 +143,7 @@ highlightDecompressed slfp p =
         (Attributed.deCompressGAttributed False updateAttr . Attributed.highlightNodeG (isPattern p))
         $ Attributed.toSLFPAttributed (isPattern p) slfp
   where
-    updateAttr b pID i x = b
+    updateAttr b pID x = b
 
 highlightPatternInCorpus ::
     (_) =>
@@ -161,10 +162,10 @@ markPatternIdDecompressed ::
     SLFPAttributed [PatternID] a k
 markPatternIdDecompressed slfp =
     fixedPoint
-        (Attributed.deCompressGAttributed [] updateAttr)
+        (Attributed.deCompressGAttributed [] updateAttr) -- potential BUG: the accumulator is empty at each iteration?
         $ Attributed.toSLFPAttributed (const []) slfp
   where
-    updateAttr b pID i x = b ++ [pID]
+    updateAttr b pID  x = b ++ [pID]
 
 -- initPatternList (Var x) = [x]
 -- initPatternList _ = []
@@ -180,10 +181,10 @@ markPatternIdInCorpus =
 
 patternFreqInCorpus :: (_) => SLFP a k -> Map PatternID Int
 patternFreqInCorpus slfp =
-    Map.unionWith max (0 <$ globalPatterns slfp)
-        . Map.filterWithKey
-            (\k _ -> k `Map.member` globalPatterns slfp)
-        . Map.unionsWith (+)
+    -- Map.unionWith max (0 <$ globalPatterns slfp)
+    -- . Map.filterWithKey
+    --     (\k _ -> k `Map.member` globalPatterns slfp)
+    Map.unionsWith (+)
         . fmap (getPatternCount . fmap fst)
         . Map.elems
         . markPatternIdInCorpus
@@ -356,6 +357,19 @@ pieceDecompressProcess slfp = nub . fmap compressedTree <$> pieceSLTPs
   where
     pieceSLTPs = Map.unionsWith (++) $ fmap pure . sltps <$> iterateTilFixed deCompressG slfp
 
+pieceDecompressProcessAttributed :: (_) => SLFP r k -> Map k [Tree ([String], Abstraction r)]
+pieceDecompressProcessAttributed slfp =
+    nub . fmap Attributed.compressedTree
+        <$> pieceSLTPs
+  where
+    pieceSLTPs =
+        Map.unionsWith (++) $
+            fmap pure . sltpsAttributed
+                <$> iterateTilFixed
+                    (deCompressGAttributed [] (\b x  _ -> b ++ [x]))
+                    attributedSLFP
+    attributedSLFP = Attributed.toSLFPAttributed (const []) slfp
+
 -- >>> iterateTilFixed (\x -> if x == 0 then 0 else x - 1 ) 12
 -- [12,11,10,9,8,7,6,5,4,3,2,1,0]
 pruneGlobalPatterns :: (_) => SLFP a b -> SLFP a b
@@ -364,4 +378,4 @@ pruneGlobalPatterns slfp = slfp{globalPatterns = dP}
     dP = f $ globalPatterns slfp
     f = Map.filterWithKey $ \k v ->
         (not . null $ directDependents slfp k)
-            && patternFreqInCorpus slfp Map.! k >0
+            && patternFreqInCorpus slfp Map.! k > 0

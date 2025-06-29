@@ -26,7 +26,7 @@ import Data.Foldable
 deCompressTreeAttributed ::
     (Ord a, _) =>
     b -> -- default value for the attribute
-    (b -> String -> Int -> Abstraction a -> b) ->
+    (b -> String -> Abstraction a -> b) ->
     (String -> Pattern (Abstraction a)) ->
     (String -> Meta) ->
     (Abstraction a -> Int) ->
@@ -60,7 +60,7 @@ pSubstituteAllAttributed ::
     b ->
     Int ->
     (String, Pattern (Abstraction a)) ->
-    (b -> String -> Int -> Abstraction a -> b) ->
+    (b -> String  -> Abstraction a -> b) ->
     Tree (b, Abstraction a) ->
     [Location] ->
     Tree (b, Abstraction a)
@@ -81,7 +81,7 @@ pSubstitutionTopAttributed ::
     b ->
     Int ->
     (String, Pattern (Abstraction a)) ->
-    (b -> String -> Int -> Abstraction a -> b) ->
+    (b -> String  -> Abstraction a -> b) ->
     Tree (b, Abstraction a) ->
     Tree (b, Abstraction a)
 pSubstitutionTopAttributed defB n (patID, pat) f (Node (b, _) ts) =
@@ -93,13 +93,13 @@ pSubstitutionTopAttributed defB n (patID, pat) f (Node (b, _) ts) =
                     ++ drop (i + n - 1) ts
           where
             -- only the top g's atttribute in @g oi f@ updated (for the task of locating the pattern)
-            updatedAttr = f b patID i r
+            updatedAttr = f b patID  r
         TreePattern t -> fillHoles ((==Hole) . snd) 
-            t'{rootLabel = (f b patID undefined r,r) } 
+            t'{rootLabel = (f b patID  r,r) } 
             ts
             where 
                 t' = (initAttr &&& id) <$> t
-                (b,r) = rootLabel t'
+                (_,r) = rootLabel t'
   where
     initAttr = const defB
 
@@ -179,7 +179,7 @@ toSLFPAttributed f slfp =
 deCompressGAttributed ::
     (_) =>
     b ->
-    (b -> String -> Int -> Abstraction a -> b) ->
+    (b -> String -> Abstraction a -> b) ->
     SLFPAttributed b a k ->
     SLFPAttributed b a k
 deCompressGAttributed defB f g@(SLFPAttributed dE dpG drG dA) = SLFPAttributed dE' dpG drG dA
@@ -189,7 +189,7 @@ deCompressGAttributed defB f g@(SLFPAttributed dE dpG drG dA) = SLFPAttributed d
 deCompressLAttributed ::
     (Ord a, _) =>
     b ->
-    (b -> String -> Int -> Abstraction a -> b) ->
+    (b -> String -> Abstraction a -> b) ->
     Map String (Pattern (Abstraction a)) ->
     Map String Meta ->
     Map (Abstraction a) Int ->

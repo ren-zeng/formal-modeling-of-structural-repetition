@@ -8,25 +8,28 @@ import Compression.Meta
 import Compression.SLFP
 import Data.Aeson
 import Data.List (sortOn)
-import qualified Data.Map as Map hiding (filter, mapMaybe, take)
+import qualified Data.Map as Map hiding (mapMaybe, take)
 import GHC.Generics hiding (Meta)
 import Grammar.JazzHarmony.JazzGrammar
 import Prettyprinter
 
 -- import Visualization.TreeVisualizer
 
+import AnalyzePattern (SLFPBinding (patternLookup))
 import Compression.InlineDigram
 import Core.ParseTree
 import Data.Set (Set)
 import qualified Data.Set as Set
 import Data.Tree
-import Debug.Trace (traceM)
+import Debug.Trace (traceM, traceWith)
 import Experiment.TismirExperiment
 import Grammar.JazzHarmony.MusicTheory
 import Grammar.Rhythm.RhythmGrammar (RhythmNT, RhythmRule, RhythmTerminal)
 import Preprocessing.Preprocess
 import Safe (readMay)
-import AnalyzePattern (SLFPBinding(patternLookup))
+import Data.Function
+import Data.Functor.Base
+import Data.Functor.Foldable
 
 proofTreeFolderPath :: String
 proofTreeFolderPath = "experiment/data/ProofTrees"
@@ -100,9 +103,42 @@ reportCompression :: (_) => FilePath -> SLFP a b -> IO ()
 reportCompression resultDir slfp = do
     traceM $ show $ Map.size $ sltps slfp
     let steps = compressGSteps slfp
-        final = last steps
-        -- final = metaStageCompress (show) final'
-        
+        final' = last steps
+        inlined = metaStageCompress show final'
+      
+        freq = patternFreqInCorpus inlined
+            & traceWith (show . pretty. Map.toList)
+
+        insufficientPatterns = globalPatterns inlined
+            & Map.filterWithKey
+                (\k _ ->
+                    k `Map.notMember` freq
+                -- &&
+                -- null (patternDependents inlined k)
+                )
+
+            & traceWith (\x -> "insufficientPatterns: " <> show ( Map.toList x))
+
+        patternsAfterPruning = (globalPatterns inlined
+            Map.\\ insufficientPatterns)
+            & traceWith (\x -> "patternsAfterPruning: "<> (show. pretty . Map.toList $ fmap (Set.toList . varsInPattern ) x))
+        varsInTreePattern :: Tree (Abstraction a) -> Set String
+        varsInTreePattern = cata $ \case
+            NodeF a [] -> getVariables a
+            NodeF a rs -> Set.unions (getVariables a:rs)
+
+        varsInPattern :: Pattern (Abstraction a) -> Set String
+        varsInPattern = \case
+            Comp i x y -> getVariables x `Set.union` getVariables y
+            TreePattern t -> varsInTreePattern t
+
+
+        final =
+            inlined
+                { globalPatterns = patternsAfterPruning
+                }
+            -- & traceWith (\x -> "allPiecesTrees: "<> (show. pretty . Map.toList $ fmap ((Set.toList . varsInTreePattern) . compressedTree) (sltps x)))
+
 
     putStrLn "finished compression"
 
@@ -112,6 +148,17 @@ reportCompression resultDir slfp = do
     putStrLn "saving globalMetas"
     encodeFile (resultDir <> "/globalMetas.json") (minedMetas final)
 
+
+
+    putStrLn "computing patternInfo"
+    let patternInfo = mkPatternInfo final $ Map.keys (globalPatterns final)
+
+    putStrLn "saving patternInfo"
+    encodeFile (resultDir <> "/patternInfo.json") patternInfo
+
+    putStrLn "saving patternLocs"
+    encodeFile (resultDir <> "/patternLocs.json") $ markPatternIdInCorpus final
+
     putStrLn "computing pieceInfos"
     let pieceInfos =
             fmap (\(k, ((m, n), ts)) -> PieceInfo k m n ts) $
@@ -120,7 +167,7 @@ reportCompression resultDir slfp = do
                         (,)
                         (individualPieceChange slfp final)
                         (pieceDecompressProcess final)
-    
+
     putStrLn "saving pieceInfos"
     encodeFile (resultDir <> "/pieceInfo.json") pieceInfos
 
@@ -132,16 +179,9 @@ reportCompression resultDir slfp = do
         (resultDir <> "/sizeCurve.json")
         (uncurry SizeCurve <$> zip [1 ..] (size <$> steps ++ [final]))
 
-    putStrLn "saving patternLocs"
-    encodeFile (resultDir <> "/patternLocs.json") $ markPatternIdInCorpus final
 
-    putStrLn "computing patternInfo"
-    let patternInfo = mkPatternInfo final $ Map.keys (globalPatterns final)
 
-    putStrLn "saving patternInfo"
-    encodeFile (resultDir <> "/patternInfo.json") patternInfo
 
-    
 
 type PatternID = String
 
@@ -163,24 +203,26 @@ instance (ToJSON k, ToJSON r) => ToJSON (PatternInfo r k)
 instance (FromJSON k, FromJSON r, Ord k) => FromJSON (PatternInfo r k)
 
 mkPatternInfo :: (_) => SLFP r k -> [PatternID] -> [PatternInfo r k]
-mkPatternInfo slfp pIds = let 
-    dFreq = patternFreqInCorpus slfp 
-    globalFrequency = (dFreq `debugLookup`) 
-    in
-    
-        (\pId ->
-        PatternInfo
-            { patternID = pId
-            , definition = globalPatterns slfp `debugLookup` pId
-            , dependentsDirect = directDependents slfp pId
-            , dependenciesDirect = directDependencies slfp pId
-            , globalFreq =globalFrequency pId
-            , sizeExpanded = patternSizeExpanded slfp pId
-            , occuranceInCorpus = patternOccuranceG slfp pId
-            , depths = patternDepthInCorpus slfp `debugLookup` pId
-            , impact = patternImpact globalFrequency (Set.toList . directDependents slfp) pId
-            , ruleTree = patternAsComputation slfp pId
-            } )
+mkPatternInfo slfp pIds =
+    let
+        dFreq = patternFreqInCorpus slfp
+        globalFrequency k = fromMaybe 0 (Map.lookup k dFreq)
+
+     in
+        ( \pId ->
+            PatternInfo
+                { patternID = pId
+                , definition = globalPatterns slfp Map.! pId
+                , dependentsDirect = directDependents slfp pId
+                , dependenciesDirect = directDependencies slfp pId
+                , globalFreq = globalFrequency pId
+                , sizeExpanded = patternSizeExpanded slfp pId
+                , occuranceInCorpus = patternOccuranceG slfp pId
+                , depths = patternDepthInCorpus slfp Map.! pId
+                , impact = patternImpact globalFrequency (Set.toList . directDependents slfp) pId
+                , ruleTree = patternAsComputation slfp pId
+                }
+        )
             <$> pIds
 
 -- compressCorpus :: _ => (FilePath -> IO [a]) ->
