@@ -1,0 +1,14 @@
+source-repository-package
+  type: git
+  location: https://github.com/DCMLab/haskell-musicology.git
+  tag: 21d3be9b932239cb638f4538067f40399cc7b465
+  subdir: 
+    musicology-core
+    musicology-pitch
+
+source-repository-package
+  type: git 
+  location: https://github.com/ren-zeng/TreeDiagrams.git 
+  tag: ebcb3789b9a2320a75df799b02ebdb433d96c6d4
+
+packages: .

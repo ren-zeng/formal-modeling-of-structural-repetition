@@ -1,7 +1,7 @@
 module Grammar.JazzHarmony.MusicTheory where 
 
 import Musicology.Pitch (SPC)
-import Data.Text
+import Data.Text hiding (show)
 import Text.Printf
 import GHC.Generics
 import Data.Aeson
